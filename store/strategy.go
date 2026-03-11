@@ -230,6 +230,11 @@ type RiskControlConfig struct {
 	MinRiskRewardRatio float64 `json:"min_risk_reward_ratio"`
 	// Min AI confidence to open position (AI guided)
 	MinConfidence int `json:"min_confidence"`
+	// Min SL/TP distance from current price in percentage (CODE ENFORCED, default: 0.5%)
+	MinSLDistancePct float64 `json:"min_sl_distance_pct"`
+
+	// Min hold time in minutes before drawdown monitoring kicks in (0 = immediate, CODE ENFORCED)
+	MinDrawdownCheckMinutes int `json:"min_drawdown_check_minutes"`
 }
 
 // NewStrategyStore creates a new StrategyStore
@@ -317,6 +322,8 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			MinPositionSize:                 12,  // Min 12 USDT per position (CODE ENFORCED)
 			MinRiskRewardRatio:              3.0, // Min 3:1 profit/loss ratio (AI guided)
 			MinConfidence:                   75,  // Min 75% confidence (AI guided)
+			MinSLDistancePct:                0.5, // Min 0.5% distance from current price to SL/TP
+			MinDrawdownCheckMinutes:         30,  // Wait 30 minutes before checking drawdown (CODE ENFORCED)
 		},
 	}
 

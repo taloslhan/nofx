@@ -12,9 +12,25 @@ import (
 	"nofx/provider/hyperliquid"
 	"nofx/provider/nofxos"
 	"nofx/security"
+	"nofx/mcp"
 	"nofx/store"
+	"regexp"
 	"strings"
 	"time"
+)
+
+// ============================================================================
+// Pre-compiled regular expressions (performance optimization)
+// ============================================================================
+
+var (
+	reJSONFence      = regexp.MustCompile(`(?is)` + "```json\\s*(\\[\\s*\\{.*?\\}\\s*\\])\\s*```")
+	reJSONArray      = regexp.MustCompile(`(?is)\[\s*\{.*?\}\s*\]`)
+	reArrayHead      = regexp.MustCompile(`^\[\s*\{`)
+	reArrayOpenSpace = regexp.MustCompile(`^\[\s+\{`)
+	reInvisibleRunes = regexp.MustCompile("[\u200B\u200C\u200D\uFEFF]")
+	reReasoningTag   = regexp.MustCompile(`(?s)<reasoning>(.*?)</reasoning>`)
+	reDecisionTag    = regexp.MustCompile(`(?s)<decision>(.*?)</decision>`)
 )
 
 // ============================================================================

@@ -2108,6 +2108,10 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 			}
 		}
 
+		// Round to 2 decimal places to avoid floating-point precision issues
+		// (e.g., 2.0 being represented as 1.9999999... and failing the >= 2.0 check)
+		riskRewardRatio = math.Round(riskRewardRatio*100) / 100
+
 		if riskRewardRatio < minRiskRewardRatio {
 			return fmt.Errorf("risk/reward ratio too low (%.2f:1), must be >=%.1f:1 [risk: %.2f%% reward: %.2f%%] [entry: %.2f stop_loss: %.2f take_profit: %.2f]",
 				riskRewardRatio, minRiskRewardRatio, riskPercent, rewardPercent, entryPrice, d.StopLoss, d.TakeProfit)

@@ -62,6 +62,12 @@ func (t *FuturesTrader) OpenLong(symbol string, quantity float64, leverage int) 
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	// Include avg fill price for market orders (used to update actionRecord.Price)
+	if order.AvgPrice != "" {
+		if avgPrice, err := strconv.ParseFloat(order.AvgPrice, 64); err == nil && avgPrice > 0 {
+			result["avgPrice"] = avgPrice
+		}
+	}
 	return result, nil
 }
 
@@ -117,6 +123,12 @@ func (t *FuturesTrader) OpenShort(symbol string, quantity float64, leverage int)
 	result["orderId"] = order.OrderID
 	result["symbol"] = order.Symbol
 	result["status"] = order.Status
+	// Include avg fill price for market orders (used to update actionRecord.Price)
+	if order.AvgPrice != "" {
+		if avgPrice, err := strconv.ParseFloat(order.AvgPrice, 64); err == nil && avgPrice > 0 {
+			result["avgPrice"] = avgPrice
+		}
+	}
 	return result, nil
 }
 

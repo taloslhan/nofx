@@ -2122,6 +2122,48 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 }
 
 // ============================================================================
+// Exported Validation Functions
+// ============================================================================
+
+// ValidateRiskReward checks if the risk/reward ratio meets the minimum requirement.
+// This is exported for use by the trader package to re-validate with fresh market prices
+// before executing orders, preventing stale-price validation from allowing bad trades.
+// (e.g., cycle #190: AI analyzed at 86.81, validated with old price, but filled at 89.68
+// where TP 89.5 was already below entry)
+func ValidateRiskReward(action string, entryPrice, stopLoss, takeProfit, minRiskRewardRatio float64) error {
+	if minRiskRewardRatio <= 0 || entryPrice <= 0 {
+		return nil
+	}
+
+	var riskPercent, rewardPercent, riskRewardRatio float64
+	if action == "open_long" {
+		riskPercent = (entryPrice - stopLoss) / entryPrice * 100
+		rewardPercent = (takeProfit - entryPrice) / entryPrice * 100
+		if riskPercent > 0 {
+			riskRewardRatio = rewardPercent / riskPercent
+		}
+	} else if action == "open_short" {
+		riskPercent = (stopLoss - entryPrice) / entryPrice * 100
+		rewardPercent = (entryPrice - takeProfit) / entryPrice * 100
+		if riskPercent > 0 {
+			riskRewardRatio = rewardPercent / riskPercent
+		}
+	} else {
+		return nil // Not an open action
+	}
+
+	// Round to 2 decimal places to avoid floating-point precision issues
+	riskRewardRatio = math.Round(riskRewardRatio*100) / 100
+
+	if riskRewardRatio < minRiskRewardRatio {
+		return fmt.Errorf("risk/reward ratio too low at current price (%.2f:1), must be >=%.1f:1 [entry: %.2f stop_loss: %.2f take_profit: %.2f risk: %.2f%% reward: %.2f%%]",
+			riskRewardRatio, minRiskRewardRatio, entryPrice, stopLoss, takeProfit, riskPercent, rewardPercent)
+	}
+
+	return nil
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 

@@ -108,6 +108,16 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	actionRecord.Quantity = quantity
 	actionRecord.Price = marketData.CurrentPrice
 
+	// [CODE ENFORCED] Re-validate R:R with fresh market price before execution
+	// This prevents stale-price validation from allowing bad trades
+	// (e.g., cycle #190: AI analyzed at 86.81, but market moved to 88.5+ during AI processing)
+	if at.strategyEngine != nil {
+		riskConfig := at.strategyEngine.GetRiskControlConfig()
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio); err != nil {
+			return fmt.Errorf("[pre-execution R:R check] %w", err)
+		}
+	}
+
 	// Set margin mode
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
 		logger.Infof("  ⚠️ Failed to set margin mode: %v", err)
@@ -123,6 +133,10 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	// Record order ID
 	if orderID, ok := order["orderId"].(int64); ok {
 		actionRecord.OrderID = orderID
+	}
+	// Update entry price to actual fill price if available from exchange response
+	if avgPrice, ok := order["avgPrice"].(float64); ok && avgPrice > 0 {
+		actionRecord.Price = avgPrice
 	}
 
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
@@ -225,6 +239,14 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	actionRecord.Quantity = quantity
 	actionRecord.Price = marketData.CurrentPrice
 
+	// [CODE ENFORCED] Re-validate R:R with fresh market price before execution
+	if at.strategyEngine != nil {
+		riskConfig := at.strategyEngine.GetRiskControlConfig()
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio); err != nil {
+			return fmt.Errorf("[pre-execution R:R check] %w", err)
+		}
+	}
+
 	// Set margin mode
 	if err := at.trader.SetMarginMode(decision.Symbol, at.config.IsCrossMargin); err != nil {
 		logger.Infof("  ⚠️ Failed to set margin mode: %v", err)
@@ -240,6 +262,10 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	// Record order ID
 	if orderID, ok := order["orderId"].(int64); ok {
 		actionRecord.OrderID = orderID
+	}
+	// Update entry price to actual fill price if available from exchange response
+	if avgPrice, ok := order["avgPrice"].(float64); ok && avgPrice > 0 {
+		actionRecord.Price = avgPrice
 	}
 
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)

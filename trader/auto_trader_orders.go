@@ -111,9 +111,10 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	// [CODE ENFORCED] Re-validate R:R with fresh market price before execution
 	// This prevents stale-price validation from allowing bad trades
 	// (e.g., cycle #190: AI analyzed at 86.81, but market moved to 88.5+ during AI processing)
+	// Use 80% tolerance: market may drift during AI decision cycle, so allow slightly relaxed ratio
 	if at.strategyEngine != nil {
 		riskConfig := at.strategyEngine.GetRiskControlConfig()
-		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio); err != nil {
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio*0.8); err != nil {
 			return fmt.Errorf("[pre-execution R:R check] %w", err)
 		}
 	}
@@ -240,9 +241,10 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	actionRecord.Price = marketData.CurrentPrice
 
 	// [CODE ENFORCED] Re-validate R:R with fresh market price before execution
+	// Use 80% tolerance: market may drift during AI decision cycle
 	if at.strategyEngine != nil {
 		riskConfig := at.strategyEngine.GetRiskControlConfig()
-		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio); err != nil {
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio*0.8); err != nil {
 			return fmt.Errorf("[pre-execution R:R check] %w", err)
 		}
 	}

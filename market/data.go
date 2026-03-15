@@ -119,20 +119,20 @@ func GetWithExchange(symbol, exchange string) (*Data, error) {
 	// Get Funding Rate
 	fundingRate, _ := getFundingRate(symbol)
 
-	// Calculate intraday series data
-	intradayData := calculateIntradaySeries(klines3m)
+	// Calculate intraday series data (isLive=true: skip indicators for unclosed last bar)
+	intradayData := calculateIntradaySeries(klines3m, true)
 
-	// Calculate longer-term data
-	longerTermData := calculateLongerTermData(klines4h)
+	// Calculate longer-term data (isLive=true: skip indicators for unclosed last bar)
+	longerTermData := calculateLongerTermData(klines4h, true)
 
 	return &Data{
 		Symbol:            symbol,
 		CurrentPrice:      currentPrice,
 		PriceChange1h:     priceChange1h,
 		PriceChange4h:     priceChange4h,
-		CurrentEMA20:      currentEMA20,
-		CurrentMACD:       currentMACD,
-		CurrentRSI7:       currentRSI7,
+		LiveEMA20:         currentEMA20,
+		LiveMACD:          currentMACD,
+		LiveRSI7:          currentRSI7,
 		OpenInterest:      oiData,
 		FundingRate:       fundingRate,
 		IntradaySeries:    intradayData,
@@ -206,8 +206,8 @@ func GetWithTimeframes(symbol string, timeframes []string, primaryTimeframe stri
 			primaryKlines = klines
 		}
 
-		// Calculate series data for this timeframe (use count from config)
-		seriesData := calculateTimeframeSeries(klines, tf, count)
+		// Calculate series data for this timeframe (use count from config, isLive=true)
+		seriesData := calculateTimeframeSeries(klines, tf, count, true)
 		timeframeData[tf] = seriesData
 	}
 
@@ -246,9 +246,9 @@ func GetWithTimeframes(symbol string, timeframes []string, primaryTimeframe stri
 		CurrentPrice:  currentPrice,
 		PriceChange1h: priceChange1h,
 		PriceChange4h: priceChange4h,
-		CurrentEMA20:  currentEMA20,
-		CurrentMACD:   currentMACD,
-		CurrentRSI7:   currentRSI7,
+		LiveEMA20:     currentEMA20,
+		LiveMACD:      currentMACD,
+		LiveRSI7:      currentRSI7,
 		OpenInterest:  oiData,
 		FundingRate:   fundingRate,
 		TimeframeData: timeframeData,
@@ -347,8 +347,9 @@ func Format(data *Data) string {
 
 	// Format price with dynamic precision
 	priceStr := formatPriceWithDynamicPrecision(data.CurrentPrice)
-	sb.WriteString(fmt.Sprintf("current_price = %s, current_ema20 = %.3f, current_macd = %.3f, current_rsi (7 period) = %.3f\n\n",
-		priceStr, data.CurrentEMA20, data.CurrentMACD, data.CurrentRSI7))
+	sb.WriteString(fmt.Sprintf("current_price = %s\n", priceStr))
+	sb.WriteString(fmt.Sprintf("live_ema20 = %.3f, live_macd = %.3f, live_rsi7 = %.3f (based on unclosed bar, for reference only)\n\n",
+		data.LiveEMA20, data.LiveMACD, data.LiveRSI7))
 
 	sb.WriteString(fmt.Sprintf("In addition, here is the latest %s open interest and funding rate for perps:\n\n",
 		data.Symbol))
@@ -439,7 +440,7 @@ func formatTimeframeData(sb *strings.Builder, data *TimeframeSeriesData) {
 			timeStr := t.Format("01-02 15:04")
 			marker := ""
 			if i == len(data.Klines)-1 {
-				marker = "  <- current"
+				marker = "  <- current (unclosed)"
 			}
 			sb.WriteString(fmt.Sprintf("%-14s %-9.4f %-9.4f %-9.4f %-9.4f %-12.2f%s\n",
 				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker))
@@ -615,19 +616,19 @@ func BuildDataFromKlines(symbol string, primary []Kline, longer []Kline) (*Data,
 	data := &Data{
 		Symbol:            symbol,
 		CurrentPrice:      currentPrice,
-		CurrentEMA20:      calculateEMA(primary, 20),
-		CurrentMACD:       calculateMACD(primary),
-		CurrentRSI7:       calculateRSI(primary, 7),
+		LiveEMA20:         calculateEMA(primary, 20),
+		LiveMACD:          calculateMACD(primary),
+		LiveRSI7:          calculateRSI(primary, 7),
 		PriceChange1h:     priceChangeFromSeries(primary, time.Hour),
 		PriceChange4h:     priceChangeFromSeries(primary, 4*time.Hour),
 		OpenInterest:      &OIData{Latest: 0, Average: 0},
 		FundingRate:       0,
-		IntradaySeries:    calculateIntradaySeries(primary),
+		IntradaySeries:    calculateIntradaySeries(primary, false),
 		LongerTermContext: nil,
 	}
 
 	if len(longer) > 0 {
-		data.LongerTermContext = calculateLongerTermData(longer)
+		data.LongerTermContext = calculateLongerTermData(longer, false)
 	}
 
 	return data, nil

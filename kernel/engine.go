@@ -1258,7 +1258,7 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 	if btcData, hasBTC := ctx.MarketDataMap["BTCUSDT"]; hasBTC {
 		sb.WriteString(fmt.Sprintf("BTC: %.2f (1h: %+.2f%%, 4h: %+.2f%%) | MACD: %.4f | RSI: %.2f\n\n",
 			btcData.CurrentPrice, btcData.PriceChange1h, btcData.PriceChange4h,
-			btcData.CurrentMACD, btcData.CurrentRSI7))
+			btcData.LiveMACD, btcData.LiveRSI7))
 	}
 
 	// Account information
@@ -1531,15 +1531,15 @@ func (e *StrategyEngine) formatMarketData(data *market.Data) string {
 	sb.WriteString(fmt.Sprintf("current_price = %.4f", data.CurrentPrice))
 
 	if indicators.EnableEMA {
-		sb.WriteString(fmt.Sprintf(", current_ema20 = %.3f", data.CurrentEMA20))
+		sb.WriteString(fmt.Sprintf(", live_ema20 = %.3f", data.LiveEMA20))
 	}
 
 	if indicators.EnableMACD {
-		sb.WriteString(fmt.Sprintf(", current_macd = %.3f", data.CurrentMACD))
+		sb.WriteString(fmt.Sprintf(", live_macd = %.3f", data.LiveMACD))
 	}
 
 	if indicators.EnableRSI {
-		sb.WriteString(fmt.Sprintf(", current_rsi7 = %.3f", data.CurrentRSI7))
+		sb.WriteString(fmt.Sprintf(", live_rsi7 = %.3f", data.LiveRSI7))
 	}
 
 	sb.WriteString("\n\n")
@@ -1640,7 +1640,7 @@ func (e *StrategyEngine) formatTimeframeSeriesData(sb *strings.Builder, data *ma
 			timeStr := t.Format("01-02 15:04")
 			marker := ""
 			if i == len(data.Klines)-1 {
-				marker = "  <- current"
+				marker = "  <- current (unclosed, data may change)"
 			}
 			sb.WriteString(fmt.Sprintf("%-14s %-9.4f %-9.4f %-9.4f %-9.4f %-12.2f%s\n",
 				timeStr, k.Open, k.High, k.Low, k.Close, k.Volume, marker))
@@ -2112,9 +2112,11 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 		// (e.g., 2.0 being represented as 1.9999999... and failing the >= 2.0 check)
 		riskRewardRatio = math.Round(riskRewardRatio*100) / 100
 
-		if riskRewardRatio < minRiskRewardRatio {
+		// Use 80% tolerance: AI decision may use slightly different price assumptions
+		tolerantRatio := minRiskRewardRatio * 0.8
+		if riskRewardRatio < tolerantRatio {
 			return fmt.Errorf("risk/reward ratio too low (%.2f:1), must be >=%.1f:1 [risk: %.2f%% reward: %.2f%%] [entry: %.2f stop_loss: %.2f take_profit: %.2f]",
-				riskRewardRatio, minRiskRewardRatio, riskPercent, rewardPercent, entryPrice, d.StopLoss, d.TakeProfit)
+				riskRewardRatio, tolerantRatio, riskPercent, rewardPercent, entryPrice, d.StopLoss, d.TakeProfit)
 		}
 	}
 

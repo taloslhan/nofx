@@ -63,8 +63,7 @@ func TestCalculateIntradaySeries_VolumeCollection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			klines := generateTestKlines(tt.klineCount)
-			data := calculateIntradaySeries(klines)
-
+			data := calculateIntradaySeries(klines, false)
 			if data == nil {
 				t.Fatal("calculateIntradaySeries returned nil")
 			}
@@ -113,7 +112,7 @@ func TestCalculateIntradaySeries_VolumeValues(t *testing.T) {
 		{Close: 109.0, Volume: 1900.0, High: 110.0, Low: 108.0, Open: 109.0},
 	}
 
-	data := calculateIntradaySeries(klines)
+	data := calculateIntradaySeries(klines, false)
 
 	expectedVolumes := []float64{1000.0, 1100.0, 1200.0, 1300.0, 1400.0, 1500.0, 1600.0, 1700.0, 1800.0, 1900.0}
 
@@ -166,8 +165,7 @@ func TestCalculateIntradaySeries_ATR14(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			klines := generateTestKlines(tt.klineCount)
-			data := calculateIntradaySeries(klines)
-
+			data := calculateIntradaySeries(klines, false)
 			if data == nil {
 				t.Fatal("calculateIntradaySeries returned nil")
 			}
@@ -281,7 +279,7 @@ func TestCalculateATR_TrueRange(t *testing.T) {
 // TestCalculateIntradaySeries_ConsistencyWithOtherIndicators tests Volume and other indicators consistency
 func TestCalculateIntradaySeries_ConsistencyWithOtherIndicators(t *testing.T) {
 	klines := generateTestKlines(30)
-	data := calculateIntradaySeries(klines)
+	data := calculateIntradaySeries(klines, false)
 
 	// All arrays should exist
 	if data.MidPrices == nil {
@@ -308,7 +306,7 @@ func TestCalculateIntradaySeries_ConsistencyWithOtherIndicators(t *testing.T) {
 // TestCalculateIntradaySeries_EmptyKlines tests empty K-line data
 func TestCalculateIntradaySeries_EmptyKlines(t *testing.T) {
 	klines := []Kline{}
-	data := calculateIntradaySeries(klines)
+	data := calculateIntradaySeries(klines, false)
 
 	if data == nil {
 		t.Fatal("calculateIntradaySeries should not return nil for empty klines")
@@ -336,7 +334,7 @@ func TestCalculateIntradaySeries_VolumePrecision(t *testing.T) {
 		{Close: 102.0, Volume: 5555.1111, High: 103.0, Low: 101.0},
 	}
 
-	data := calculateIntradaySeries(klines)
+	data := calculateIntradaySeries(klines, false)
 
 	expectedVolumes := []float64{1234.5678, 9876.5432, 5555.1111}
 

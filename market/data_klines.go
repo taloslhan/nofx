@@ -149,8 +149,11 @@ func getKlinesFromHyperliquid(symbol, interval string, limit int) ([]Kline, erro
 	return klines, nil
 }
 
-// calculateTimeframeSeries calculates series data for a single timeframe
-func calculateTimeframeSeries(klines []Kline, timeframe string, count int) *TimeframeSeriesData {
+// calculateTimeframeSeries calculates series data for a single timeframe.
+// When isLive=true, the last kline is considered unclosed and its indicators are
+// excluded from indicator arrays (EMA, MACD, RSI, BOLL) while OHLCV/MidPrices/Volume
+// still include it. When isLive=false (backtest), all klines are treated as closed.
+func calculateTimeframeSeries(klines []Kline, timeframe string, count int, isLive bool) *TimeframeSeriesData {
 	if count <= 0 {
 		count = 10 // default
 	}
@@ -191,6 +194,11 @@ func calculateTimeframeSeries(klines []Kline, timeframe string, count int) *Time
 		data.MidPrices = append(data.MidPrices, klines[i].Close)
 		data.Volume = append(data.Volume, klines[i].Volume)
 
+		// Skip indicator calculation for the last (unclosed) kline in live mode
+		if isLive && i == len(klines)-1 {
+			continue
+		}
+
 		// Calculate EMA20 for each point
 		if i >= 19 {
 			ema20 := calculateEMA(klines[:i+1], 20)
@@ -228,8 +236,12 @@ func calculateTimeframeSeries(klines []Kline, timeframe string, count int) *Time
 		}
 	}
 
-	// Calculate ATR14
-	data.ATR14 = calculateATR(klines, 14)
+	// Calculate ATR14 from closed klines only when live
+	if isLive && len(klines) > 1 {
+		data.ATR14 = calculateATR(klines[:len(klines)-1], 14)
+	} else {
+		data.ATR14 = calculateATR(klines, 14)
+	}
 
 	return data
 }
@@ -301,8 +313,10 @@ func parseTimeframeToMinutes(tf string) int {
 	}
 }
 
-// calculateIntradaySeries calculates intraday series data
-func calculateIntradaySeries(klines []Kline) *IntradayData {
+// calculateIntradaySeries calculates intraday series data.
+// When isLive=true, the last kline is considered unclosed and its indicators are
+// excluded while MidPrices/Volume still include it.
+func calculateIntradaySeries(klines []Kline, isLive bool) *IntradayData {
 	data := &IntradayData{
 		MidPrices:   make([]float64, 0, 10),
 		EMA20Values: make([]float64, 0, 10),
@@ -321,6 +335,11 @@ func calculateIntradaySeries(klines []Kline) *IntradayData {
 	for i := start; i < len(klines); i++ {
 		data.MidPrices = append(data.MidPrices, klines[i].Close)
 		data.Volume = append(data.Volume, klines[i].Volume)
+
+		// Skip indicator calculation for the last (unclosed) kline in live mode
+		if isLive && i == len(klines)-1 {
+			continue
+		}
 
 		// Calculate EMA20 for each point
 		if i >= 19 {
@@ -345,28 +364,41 @@ func calculateIntradaySeries(klines []Kline) *IntradayData {
 		}
 	}
 
-	// Calculate 3m ATR14
-	data.ATR14 = calculateATR(klines, 14)
+	// Calculate 3m ATR14 from closed klines only when live
+	if isLive && len(klines) > 1 {
+		data.ATR14 = calculateATR(klines[:len(klines)-1], 14)
+	} else {
+		data.ATR14 = calculateATR(klines, 14)
+	}
 
 	return data
 }
 
-// calculateLongerTermData calculates longer-term data
-func calculateLongerTermData(klines []Kline) *LongerTermData {
+// calculateLongerTermData calculates longer-term data.
+// When isLive=true, scalar indicators (EMA20, EMA50, ATR3, ATR14, MACD, RSI14)
+// are computed from klines[:len-1] (closed bars only). CurrentVolume still comes
+// from the last bar as it represents real-time volume.
+func calculateLongerTermData(klines []Kline, isLive bool) *LongerTermData {
 	data := &LongerTermData{
 		MACDValues:  make([]float64, 0, 10),
 		RSI14Values: make([]float64, 0, 10),
 	}
 
+	// Determine which klines to use for indicator calculation
+	indicatorKlines := klines
+	if isLive && len(klines) > 1 {
+		indicatorKlines = klines[:len(klines)-1]
+	}
+
 	// Calculate EMA
-	data.EMA20 = calculateEMA(klines, 20)
-	data.EMA50 = calculateEMA(klines, 50)
+	data.EMA20 = calculateEMA(indicatorKlines, 20)
+	data.EMA50 = calculateEMA(indicatorKlines, 50)
 
 	// Calculate ATR
-	data.ATR3 = calculateATR(klines, 3)
-	data.ATR14 = calculateATR(klines, 14)
+	data.ATR3 = calculateATR(indicatorKlines, 3)
+	data.ATR14 = calculateATR(indicatorKlines, 14)
 
-	// Calculate volume
+	// Calculate volume - CurrentVolume always from last bar (real-time volume)
 	if len(klines) > 0 {
 		data.CurrentVolume = klines[len(klines)-1].Volume
 		// Calculate average volume
@@ -377,19 +409,19 @@ func calculateLongerTermData(klines []Kline) *LongerTermData {
 		data.AverageVolume = sum / float64(len(klines))
 	}
 
-	// Calculate MACD and RSI series
-	start := len(klines) - 10
+	// Calculate MACD and RSI series from indicator klines
+	start := len(indicatorKlines) - 10
 	if start < 0 {
 		start = 0
 	}
 
-	for i := start; i < len(klines); i++ {
+	for i := start; i < len(indicatorKlines); i++ {
 		if i >= 25 {
-			macd := calculateMACD(klines[:i+1])
+			macd := calculateMACD(indicatorKlines[:i+1])
 			data.MACDValues = append(data.MACDValues, macd)
 		}
 		if i >= 14 {
-			rsi14 := calculateRSI(klines[:i+1], 14)
+			rsi14 := calculateRSI(indicatorKlines[:i+1], 14)
 			data.RSI14Values = append(data.RSI14Values, rsi14)
 		}
 	}

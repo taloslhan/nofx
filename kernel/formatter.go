@@ -346,7 +346,7 @@ func formatKlineDataZH(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 			// Mark the last kline
 			if len(data.Klines) > 0 {
-				sb.WriteString("    <- 当前\n")
+				sb.WriteString("    <- 当前(未收线，数据可能变化)\n")
 			}
 
 			sb.WriteString("```\n\n")
@@ -611,7 +611,7 @@ func formatKlineDataEN(symbol string, tfData map[string]*market.TimeframeSeriesD
 			}
 
 			if len(data.Klines) > 0 {
-				sb.WriteString("    <- current\n")
+				sb.WriteString("    <- current (unclosed, data may change)\n")
 			}
 
 			sb.WriteString("```\n\n")

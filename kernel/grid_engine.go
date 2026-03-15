@@ -598,8 +598,8 @@ func BuildGridContextFromMarketData(mktData *market.Data, config *store.GridStra
 		ctx.EMA50 = mktData.LongerTermContext.EMA50
 	}
 
-	ctx.EMA20 = mktData.CurrentEMA20
-	ctx.MACD = mktData.CurrentMACD
+	ctx.EMA20 = mktData.LiveEMA20
+	ctx.MACD = mktData.LiveMACD
 
 	// Calculate EMA distance
 	if ctx.EMA50 > 0 {

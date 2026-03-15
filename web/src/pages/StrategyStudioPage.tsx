@@ -526,7 +526,7 @@ export function StrategyStudioPage() {
       color: '#F0B90B',
       title: tr('coinSource'),
       forStrategyType: 'ai_trading' as const,
-      content: editingConfig && (
+      content: editingConfig?.coin_source && (
         <CoinSourceEditor
           config={editingConfig.coin_source}
           onChange={(coinSource) => updateConfig('coin_source', coinSource)}
@@ -541,7 +541,7 @@ export function StrategyStudioPage() {
       color: '#0ECB81',
       title: tr('indicators'),
       forStrategyType: 'ai_trading' as const,
-      content: editingConfig && (
+      content: editingConfig?.indicators && (
         <IndicatorEditor
           config={editingConfig.indicators}
           onChange={(indicators) => updateConfig('indicators', indicators)}
@@ -556,7 +556,7 @@ export function StrategyStudioPage() {
       color: '#F6465D',
       title: tr('riskControl'),
       forStrategyType: 'ai_trading' as const,
-      content: editingConfig && (
+      content: editingConfig?.risk_control && (
         <RiskControlEditor
           config={editingConfig.risk_control}
           onChange={(riskControl) => updateConfig('risk_control', riskControl)}

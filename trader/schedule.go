@@ -56,14 +56,15 @@ func nextCandleCloseTime(timeframe string, now time.Time) (time.Time, error) {
 	// Use UTC for alignment calculations to match exchange conventions
 	nowUTC := now.UTC()
 
-	// For daily and weekly timeframes, align to midnight UTC
-	if strings.HasSuffix(timeframe, "d") || strings.HasSuffix(timeframe, "w") {
-		midnight := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
-		next := midnight.Add(duration)
-		for !next.After(nowUTC) {
-			next = next.Add(duration)
-		}
-		return next, nil
+	// Multi-day timeframes should be aligned to a fixed UTC anchor instead of
+	// "today at midnight", otherwise 3d/1w bars drift based on process start time.
+	if strings.HasSuffix(timeframe, "w") {
+		weekAnchor := time.Date(1970, 1, 5, 0, 0, 0, 0, time.UTC) // Monday 00:00 UTC
+		return nextAnchoredCloseTime(weekAnchor, duration, nowUTC), nil
+	}
+	if strings.HasSuffix(timeframe, "d") {
+		dayAnchor := time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
+		return nextAnchoredCloseTime(dayAnchor, duration, nowUTC), nil
 	}
 
 	// For intraday timeframes, align to the start of the UTC day
@@ -82,6 +83,20 @@ func nextCandleCloseTime(timeframe string, now time.Time) (time.Time, error) {
 	// which gives us the next close (not the current one) — correct behavior
 
 	return nextClose, nil
+}
+
+func nextAnchoredCloseTime(anchor time.Time, duration time.Duration, now time.Time) time.Time {
+	if !now.After(anchor) {
+		return anchor.Add(duration)
+	}
+
+	elapsed := now.Sub(anchor)
+	periods := elapsed / duration
+	next := anchor.Add((periods + 1) * duration)
+	if !next.After(now) {
+		next = next.Add(duration)
+	}
+	return next
 }
 
 // durationUntilNextCandle returns the duration to wait until the next candle close

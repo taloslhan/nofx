@@ -120,6 +120,24 @@ func TestNextCandleCloseTime(t *testing.T) {
 			expected:  time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC),
 		},
 		{
+			name:      "3d uses fixed UTC anchor",
+			timeframe: "3d",
+			now:       time.Date(2026, 3, 15, 14, 23, 0, 0, time.UTC),
+			expected:  time.Date(2026, 3, 17, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "1w aligns to monday UTC",
+			timeframe: "1w",
+			now:       time.Date(2026, 3, 18, 14, 23, 0, 0, time.UTC), // Wednesday
+			expected:  time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "1w exactly on monday boundary returns next week",
+			timeframe: "1w",
+			now:       time.Date(2026, 3, 16, 0, 0, 0, 0, time.UTC), // Monday
+			expected:  time.Date(2026, 3, 23, 0, 0, 0, 0, time.UTC),
+		},
+		{
 			name:      "3m mid-period",
 			timeframe: "3m",
 			now:       time.Date(2026, 3, 15, 14, 7, 30, 0, time.UTC),
@@ -154,7 +172,7 @@ func TestNextCandleCloseTime(t *testing.T) {
 }
 
 func TestNextCandleCloseTime_AlwaysFuture(t *testing.T) {
-	timeframes := []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d"}
+	timeframes := []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}
 	now := time.Now().UTC()
 
 	for _, tf := range timeframes {

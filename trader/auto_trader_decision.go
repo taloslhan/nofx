@@ -82,6 +82,15 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 		"ai_provider":     aiProvider,
 	}
 
+	// Add schedule mode info
+	primaryTimeframe := at.getPrimaryTimeframe()
+	if !at.IsGridStrategy() && primaryTimeframe != "" {
+		result["schedule_mode"] = "candle_close_aligned"
+		result["primary_timeframe"] = primaryTimeframe
+	} else {
+		result["schedule_mode"] = "fixed_interval"
+	}
+
 	// Add strategy info
 	if at.config.StrategyConfig != nil {
 		result["strategy_type"] = at.config.StrategyConfig.StrategyType

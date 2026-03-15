@@ -375,7 +375,6 @@ func (at *AutoTrader) Run() error {
 
 	logger.Info("🚀 AI-driven automatic trading system started")
 	logger.Infof("💰 Initial balance: %.2f USDT", at.initialBalance)
-	logger.Infof("⚙️  Scan interval: %v", at.config.ScanInterval)
 	logger.Info("🤖 AI will make full decisions on leverage, position size, stop loss/take profit, etc.")
 
 	// Pre-launch checks for claw402 users
@@ -458,9 +457,6 @@ func (at *AutoTrader) Run() error {
 		}
 	}
 
-	ticker := time.NewTicker(at.config.ScanInterval)
-	defer ticker.Stop()
-
 	// Check if this is a grid trading strategy
 	isGridStrategy := at.IsGridStrategy()
 	if isGridStrategy {
@@ -471,7 +467,19 @@ func (at *AutoTrader) Run() error {
 		}
 	}
 
-	// Execute immediately on first run
+	// Determine schedule mode: candle-close aligned vs fixed interval
+	primaryTimeframe := at.getPrimaryTimeframe()
+	useCandleSchedule := !isGridStrategy && primaryTimeframe != ""
+
+	if useCandleSchedule {
+		logger.Infof("📊 [%s] Schedule mode: candle-close aligned (timeframe: %s, delay: %v)", at.name, primaryTimeframe, CandleCloseDelay)
+	} else if isGridStrategy {
+		logger.Infof("⚙️  [%s] Schedule mode: fixed interval (%v) [grid strategy]", at.name, at.config.ScanInterval)
+	} else {
+		logger.Infof("⚙️  [%s] Schedule mode: fixed interval (%v) [no primary timeframe configured]", at.name, at.config.ScanInterval)
+	}
+
+	// Execute immediately on first run (health check: ensures AI is reachable and data pipeline works)
 	if isGridStrategy {
 		if err := at.RunGridCycle(); err != nil {
 			logger.Infof("❌ Grid execution failed: %v", err)
@@ -481,6 +489,66 @@ func (at *AutoTrader) Run() error {
 			logger.Infof("❌ Execution failed: %v", err)
 		}
 	}
+
+	// Main scheduling loop
+	if useCandleSchedule {
+		return at.runCandleAlignedLoop(primaryTimeframe)
+	}
+	return at.runFixedIntervalLoop(isGridStrategy)
+}
+
+// getPrimaryTimeframe extracts the primary timeframe from the strategy config.
+// Returns empty string if not configured.
+func (at *AutoTrader) getPrimaryTimeframe() string {
+	if at.config.StrategyConfig == nil {
+		return ""
+	}
+	return at.config.StrategyConfig.Indicators.Klines.PrimaryTimeframe
+}
+
+// runCandleAlignedLoop runs the evaluation loop aligned to candle close times.
+// Each evaluation is triggered after the primary timeframe candle closes, plus a small delay.
+func (at *AutoTrader) runCandleAlignedLoop(primaryTimeframe string) error {
+	for {
+		at.isRunningMutex.RLock()
+		running := at.isRunning
+		at.isRunningMutex.RUnlock()
+
+		if !running {
+			break
+		}
+
+		waitDuration, evalTime, err := durationUntilNextCandle(primaryTimeframe, time.Now())
+		if err != nil {
+			logger.Errorf("❌ [%s] Failed to calculate next candle close time: %v, falling back to scan interval", at.name, err)
+			waitDuration = at.config.ScanInterval
+			evalTime = time.Now().Add(waitDuration)
+		}
+
+		logger.Infof("⏳ [%s] Next evaluation at %s (waiting %v, timeframe: %s)",
+			at.name, evalTime.Format("2006-01-02 15:04:05 UTC"), waitDuration, primaryTimeframe)
+
+		timer := time.NewTimer(waitDuration)
+
+		select {
+		case <-timer.C:
+			if err := at.runCycle(); err != nil {
+				logger.Infof("❌ Execution failed: %v", err)
+			}
+		case <-at.stopMonitorCh:
+			timer.Stop()
+			logger.Infof("[%s] ⏹ Stop signal received, exiting automatic trading main loop", at.name)
+			return nil
+		}
+	}
+
+	return nil
+}
+
+// runFixedIntervalLoop runs the evaluation loop with a fixed time interval (legacy/grid mode).
+func (at *AutoTrader) runFixedIntervalLoop(isGridStrategy bool) error {
+	ticker := time.NewTicker(at.config.ScanInterval)
+	defer ticker.Stop()
 
 	for {
 		at.isRunningMutex.RLock()

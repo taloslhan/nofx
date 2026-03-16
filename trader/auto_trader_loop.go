@@ -93,9 +93,41 @@ func (at *AutoTrader) runCycle() error {
 	logger.Infof("📊 Account equity: %.2f USDT | Available: %.2f USDT | Positions: %d",
 		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
 
-	// 5. Use strategy engine to call AI for decision
-	logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
-	aiDecision, err := kernel.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
+	// 5. Use strategy engine to call AI for decision (with auto-retry up to 3 times)
+	const maxAIRetries = 3
+	retryDelays := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second}
+
+	var aiDecision *kernel.FullDecision
+
+	for attempt := 1; attempt <= maxAIRetries; attempt++ {
+		if attempt > 1 {
+			delay := retryDelays[attempt-2]
+			logger.Infof("🔄 AI decision retry attempt %d/%d (waiting %v)...", attempt, maxAIRetries, delay)
+			time.Sleep(delay)
+
+			// Check if trader is stopped before retrying
+			at.isRunningMutex.RLock()
+			stopped := !at.isRunning
+			at.isRunningMutex.RUnlock()
+			if stopped {
+				logger.Infof("⏹ Trader stopped during AI retry, aborting")
+				return nil
+			}
+		}
+
+		logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine] (attempt %d/%d)", attempt, maxAIRetries)
+		aiDecision, err = kernel.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
+
+		if err == nil {
+			break
+		}
+
+		if attempt < maxAIRetries {
+			logger.Infof("⚠️ AI decision failed (attempt %d/%d): %v", attempt, maxAIRetries, err)
+		} else {
+			logger.Infof("❌ AI decision failed after %d attempts: %v", maxAIRetries, err)
+		}
+	}
 
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
 		record.AIRequestDurationMs = aiDecision.AIRequestDurationMs
@@ -126,7 +158,7 @@ func (at *AutoTrader) runCycle() error {
 	if err != nil {
 		at.consecutiveAIFailures++
 		record.Success = false
-		record.ErrorMessage = fmt.Sprintf("Failed to get AI decision: %v", err)
+		record.ErrorMessage = fmt.Sprintf("Failed to get AI decision after %d attempts: %v", maxAIRetries, err)
 
 		// Activate safe mode after 3 consecutive failures
 		if at.consecutiveAIFailures >= 3 && !at.safeMode {
@@ -163,7 +195,7 @@ func (at *AutoTrader) runCycle() error {
 			return nil
 		}
 
-		return fmt.Errorf("failed to get AI decision: %w", err)
+		return fmt.Errorf("failed to get AI decision after %d attempts: %w", maxAIRetries, err)
 	}
 
 	// AI succeeded — reset failure counter and deactivate safe mode

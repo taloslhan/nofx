@@ -23,6 +23,15 @@ import {
   TrendingDown as ArrowDown,
 } from 'lucide-react'
 
+// Time period options: 1D, 3D, 7D, 30D, All
+const TIME_PERIODS = [
+  { key: '1d', hours: 24 },
+  { key: '3d', hours: 72 },
+  { key: '7d', hours: 168 },
+  { key: '30d', hours: 720 },
+  { key: 'all', hours: 0 },
+] as const
+
 interface EquityPoint {
   timestamp: string
   total_equity: number
@@ -40,14 +49,19 @@ export function EquityChart({ traderId, embedded = false }: EquityChartProps) {
   const { language } = useLanguage()
   const { user, token } = useAuth()
   const [displayMode, setDisplayMode] = useState<'dollar' | 'percent'>('dollar')
+  const [selectedPeriod, setSelectedPeriod] = useState('1d')
+
+  // Get hours for selected period
+  const selectedHours = TIME_PERIODS.find(p => p.key === selectedPeriod)?.hours || 0
 
   const { data: history, error, isLoading } = useSWR<EquityPoint[]>(
-    user && token && traderId ? `equity-history-${traderId}` : null,
-    () => api.getEquityHistory(traderId),
+    user && token && traderId ? `equity-history-${traderId}-${selectedHours}` : null,
+    () => api.getEquityHistory(traderId, selectedHours || undefined),
     {
-      refreshInterval: 30000, // 30秒刷新（历史数据更新频率较低）
+      refreshInterval: 30000, // 30s refresh
       revalidateOnFocus: false,
-      dedupingInterval: 20000,
+      dedupingInterval: 0, // No deduping for immediate response on period change
+      keepPreviousData: false,
     }
   )
 
@@ -145,11 +159,21 @@ export function EquityChart({ traderId, embedded = false }: EquityChartProps) {
   const chartData = displayHistory.map((point, index) => {
     const pnl = point.total_equity - initialBalance
     const pnlPct = ((pnl / initialBalance) * 100).toFixed(2)
+    const date = new Date(point.timestamp)
+    // Format time based on selected period
+    let time: string
+    if (selectedHours > 0 && selectedHours <= 24) {
+      // 1 day: show HH:mm
+      time = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    } else if (selectedHours > 0 && selectedHours <= 72) {
+      // 3 days: show MM/DD HH:mm
+      time = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
+    } else {
+      // 7+ days or all: show MM/DD
+      time = `${date.getMonth() + 1}/${date.getDate()}`
+    }
     return {
-      time: new Date(point.timestamp).toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      time,
       value: displayMode === 'dollar' ? point.total_equity : parseFloat(pnlPct),
       cycle: point.cycle_number ?? index + 1,
       raw_equity: point.total_equity,
@@ -271,11 +295,33 @@ export function EquityChart({ traderId, embedded = false }: EquityChartProps) {
           </div>
         </div>
 
-        {/* Display Mode Toggle */}
-        <div
-          className="flex gap-0.5 sm:gap-1 rounded p-0.5 sm:p-1 self-start sm:self-auto"
-          style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
-        >
+        {/* Controls: Time Period + Display Mode */}
+        <div className="flex flex-col gap-2 self-start sm:self-auto">
+          {/* Time Period Selector */}
+          <div className="flex items-center gap-1">
+            {TIME_PERIODS.map((period) => (
+              <button
+                key={period.key}
+                onClick={() => setSelectedPeriod(period.key)}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+                style={{
+                  background: selectedPeriod === period.key
+                    ? 'rgba(240, 185, 11, 0.2)'
+                    : 'rgba(43, 49, 57, 0.5)',
+                  color: selectedPeriod === period.key ? '#F0B90B' : '#848E9C',
+                  border: `1px solid ${selectedPeriod === period.key ? 'rgba(240, 185, 11, 0.4)' : '#2B3139'}`,
+                }}
+              >
+                {period.key.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {/* Display Mode Toggle */}
+          <div
+            className="flex gap-0.5 sm:gap-1 rounded p-0.5 sm:p-1"
+            style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+          >
           <button
             onClick={() => setDisplayMode('dollar')}
             className="px-3 sm:px-4 py-1.5 sm:py-2 rounded text-xs sm:text-sm font-bold transition-all flex items-center gap-1"
@@ -306,6 +352,7 @@ export function EquityChart({ traderId, embedded = false }: EquityChartProps) {
           >
             <Percent className="w-4 h-4" />
           </button>
+          </div>
         </div>
       </div>
 
@@ -467,9 +514,9 @@ export function EquityChart({ traderId, embedded = false }: EquityChartProps) {
             className="text-xs sm:text-sm font-bold mono"
             style={{ color: '#EAECEF' }}
           >
-            {validHistory.length > MAX_DISPLAY_POINTS
-              ? `${t('recent', language)} ${MAX_DISPLAY_POINTS}`
-              : t('allData', language)}
+            {selectedPeriod === 'all'
+              ? t('allData', language)
+              : selectedPeriod.toUpperCase()}
           </div>
         </div>
       </div>

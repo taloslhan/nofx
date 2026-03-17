@@ -703,6 +703,22 @@ func (tm *TraderManager) addTraderFromStore(traderCfg *store.Trader, aiModelCfg 
 		traderConfig.CustomAPIKey = string(aiModelCfg.APIKey)
 	}
 
+	// Load fallback AI model configuration (if configured)
+	if traderCfg.FallbackAIModelID != "" {
+		fallbackModel, err := st.AIModel().GetByID(traderCfg.FallbackAIModelID)
+		if err != nil {
+			logger.Infof("⚠️ Fallback AI model %s for trader %s not found, skipping fallback", traderCfg.FallbackAIModelID, traderCfg.Name)
+		} else if !fallbackModel.Enabled {
+			logger.Infof("⚠️ Fallback AI model %s for trader %s is disabled, skipping fallback", traderCfg.FallbackAIModelID, traderCfg.Name)
+		} else {
+			traderConfig.FallbackAIModel = fallbackModel.Provider
+			traderConfig.FallbackAPIKey = string(fallbackModel.APIKey)
+			traderConfig.FallbackAPIURL = fallbackModel.CustomAPIURL
+			traderConfig.FallbackModelName = fallbackModel.CustomModelName
+			logger.Infof("🔄 Trader %s fallback AI configured: %s", traderCfg.Name, fallbackModel.Provider)
+		}
+	}
+
 	// Create trader instance
 	at, err := trader.NewAutoTrader(traderConfig, st, traderCfg.UserID)
 	if err != nil {

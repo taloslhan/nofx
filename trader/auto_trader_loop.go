@@ -93,47 +93,50 @@ func (at *AutoTrader) runCycle() error {
 	logger.Infof("📊 Account equity: %.2f USDT | Available: %.2f USDT | Positions: %d",
 		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
 
-	// 5. Use strategy engine to call AI for decision (with auto-retry up to 3 times)
-	const maxAIRetries = 3
-	retryDelays := []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second}
-
+	// 5. Use strategy engine to call AI for decision (primary → fallback)
 	var aiDecision *kernel.FullDecision
+	usedFallback := false
 
-	for attempt := 1; attempt <= maxAIRetries; attempt++ {
-		if attempt > 1 {
-			delay := retryDelays[attempt-2]
-			logger.Infof("🔄 AI decision retry attempt %d/%d (waiting %v)...", attempt, maxAIRetries, delay)
-			time.Sleep(delay)
+	// Try primary AI channel (single attempt, no internal retry)
+	logger.Infof("🤖 Requesting AI analysis and decision... [Primary AI]")
+	aiDecision, err = kernel.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
 
-			// Check if trader is stopped before retrying
-			at.isRunningMutex.RLock()
-			stopped := !at.isRunning
-			at.isRunningMutex.RUnlock()
-			if stopped {
-				logger.Infof("⏹ Trader stopped during AI retry, aborting")
-				return nil
-			}
+	if err != nil && at.fallbackMcpClient != nil {
+		logger.Infof("⚠️ Primary AI failed: %v", err)
+
+		// Check if trader is stopped before trying fallback
+		at.isRunningMutex.RLock()
+		stopped := !at.isRunning
+		at.isRunningMutex.RUnlock()
+		if stopped {
+			logger.Infof("⏹ Trader stopped before fallback AI, aborting")
+			return nil
 		}
 
-		logger.Infof("🤖 Requesting AI analysis and decision... [Strategy Engine] (attempt %d/%d)", attempt, maxAIRetries)
-		aiDecision, err = kernel.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
+		// Try fallback AI channel (single attempt, no internal retry)
+		logger.Infof("🔄 Switching to fallback AI channel...")
+		aiDecision, err = kernel.GetFullDecisionWithStrategy(ctx, at.fallbackMcpClient, at.strategyEngine, "balanced")
+		usedFallback = true
 
-		if err == nil {
-			break
-		}
-
-		if attempt < maxAIRetries {
-			logger.Infof("⚠️ AI decision failed (attempt %d/%d): %v", attempt, maxAIRetries, err)
+		if err != nil {
+			logger.Infof("❌ Fallback AI also failed: %v", err)
 		} else {
-			logger.Infof("❌ AI decision failed after %d attempts: %v", maxAIRetries, err)
+			logger.Infof("✅ Fallback AI succeeded")
 		}
+	} else if err != nil {
+		logger.Infof("❌ Primary AI failed (no fallback configured): %v", err)
 	}
+
 
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
 		record.AIRequestDurationMs = aiDecision.AIRequestDurationMs
-		logger.Infof("⏱️ AI call duration: %.2f seconds", float64(record.AIRequestDurationMs)/1000)
+		channelLabel := "primary"
+		if usedFallback {
+			channelLabel = "fallback"
+		}
+		logger.Infof("⏱️ AI call duration: %.2f seconds [%s]", float64(record.AIRequestDurationMs)/1000, channelLabel)
 		record.ExecutionLog = append(record.ExecutionLog,
-			fmt.Sprintf("AI call duration: %d ms", record.AIRequestDurationMs))
+			fmt.Sprintf("AI call duration: %d ms [%s channel]", record.AIRequestDurationMs, channelLabel))
 	}
 
 	// Save chain of thought, decisions, and input prompt even if there's an error (for debugging)
@@ -158,7 +161,11 @@ func (at *AutoTrader) runCycle() error {
 	if err != nil {
 		at.consecutiveAIFailures++
 		record.Success = false
-		record.ErrorMessage = fmt.Sprintf("Failed to get AI decision after %d attempts: %v", maxAIRetries, err)
+		if at.fallbackMcpClient != nil {
+			record.ErrorMessage = fmt.Sprintf("Failed to get AI decision (primary + fallback): %v", err)
+		} else {
+			record.ErrorMessage = fmt.Sprintf("Failed to get AI decision (primary only): %v", err)
+		}
 
 		// Activate safe mode after 3 consecutive failures
 		if at.consecutiveAIFailures >= 3 && !at.safeMode {
@@ -195,7 +202,10 @@ func (at *AutoTrader) runCycle() error {
 			return nil
 		}
 
-		return fmt.Errorf("failed to get AI decision after %d attempts: %w", maxAIRetries, err)
+		if at.fallbackMcpClient != nil {
+			return fmt.Errorf("failed to get AI decision (primary + fallback): %w", err)
+		}
+		return fmt.Errorf("failed to get AI decision (primary only): %w", err)
 	}
 
 	// AI succeeded — reset failure counter and deactivate safe mode

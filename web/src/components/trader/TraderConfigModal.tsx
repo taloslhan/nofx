@@ -29,6 +29,7 @@ interface FormState {
   trader_id?: string
   trader_name: string
   ai_model: string
+  fallback_ai_model: string
   exchange_id: string
   strategy_id: string
   is_cross_margin: boolean
@@ -60,6 +61,7 @@ export function TraderConfigModal({
   const [formData, setFormData] = useState<FormState>({
     trader_name: '',
     ai_model: '',
+    fallback_ai_model: '',
     exchange_id: '',
     strategy_id: '',
     is_cross_margin: true,
@@ -108,6 +110,7 @@ export function TraderConfigModal({
       setFormData({
         trader_name: '',
         ai_model: availableModels[0]?.id || '',
+        fallback_ai_model: '',
         exchange_id: availableExchanges[0]?.id || '',
         strategy_id: '',
         is_cross_margin: true,
@@ -162,6 +165,7 @@ export function TraderConfigModal({
       const saveData: CreateTraderRequest = {
         name: formData.trader_name,
         ai_model_id: formData.ai_model,
+        fallback_ai_model_id: formData.fallback_ai_model || undefined,
         exchange_id: formData.exchange_id,
         strategy_id: formData.strategy_id,
         is_cross_margin: formData.is_cross_margin,
@@ -264,6 +268,30 @@ export function TraderConfigModal({
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="text-sm text-[#EAECEF] block mb-2">
+                    {language === 'zh' ? 'Fallback AI' : 'Fallback AI'}
+                    <span className="text-[#848E9C] ml-1 text-xs">({language === 'zh' ? '可选' : 'Optional'})</span>
+                  </label>
+                  <select
+                    value={formData.fallback_ai_model}
+                    onChange={(e) =>
+                      handleInputChange('fallback_ai_model', e.target.value)
+                    }
+                    className="w-full px-3 py-2 bg-[#0B0E11] border border-[#2B3139] rounded text-[#EAECEF] focus:border-[#F0B90B] focus:outline-none"
+                  >
+                    <option value="">{language === 'zh' ? '-- 不启用 --' : '-- None --'}</option>
+                    {availableModels
+                      .filter((model) => model.id !== formData.ai_model)
+                      .map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {getShortName(model.name || model.id).toUpperCase()}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm text-[#EAECEF] block mb-2">
                   {t('exchangeRequired', language)}

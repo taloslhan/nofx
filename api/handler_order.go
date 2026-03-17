@@ -89,6 +89,7 @@ func (s *Server) handleGetTraderConfig(c *gin.Context) {
 		"trader_id":             traderConfig.ID,
 		"trader_name":           traderConfig.Name,
 		"ai_model":              aiModelID,
+		"fallback_ai_model":     traderConfig.FallbackAIModelID,
 		"exchange_id":           traderConfig.ExchangeID,
 		"strategy_id":           traderConfig.StrategyID,
 		"initial_balance":       traderConfig.InitialBalance,

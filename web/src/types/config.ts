@@ -60,6 +60,7 @@ export interface CreateExchangeRequest {
 export interface CreateTraderRequest {
   name: string
   ai_model_id: string
+  fallback_ai_model_id?: string
   exchange_id: string
   strategy_id?: string // 策略ID（新版，使用保存的策略配置）
   initial_balance?: number // 可选：创建时由后端自动获取，编辑时可手动更新

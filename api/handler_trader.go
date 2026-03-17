@@ -26,6 +26,7 @@ import (
 type CreateTraderRequest struct {
 	Name                string  `json:"name" binding:"required"`
 	AIModelID           string  `json:"ai_model_id" binding:"required"`
+	FallbackAIModelID   string  `json:"fallback_ai_model_id"`
 	ExchangeID          string  `json:"exchange_id" binding:"required"`
 	StrategyID          string  `json:"strategy_id"` // Strategy ID (new version)
 	InitialBalance      float64 `json:"initial_balance"`
@@ -47,6 +48,7 @@ type CreateTraderRequest struct {
 type UpdateTraderRequest struct {
 	Name                string  `json:"name" binding:"required"`
 	AIModelID           string  `json:"ai_model_id" binding:"required"`
+	FallbackAIModelID   *string `json:"fallback_ai_model_id"`
 	ExchangeID          string  `json:"exchange_id" binding:"required"`
 	StrategyID          string  `json:"strategy_id"` // Strategy ID (new version)
 	InitialBalance      float64 `json:"initial_balance"`
@@ -253,6 +255,7 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		UserID:               userID,
 		Name:                 req.Name,
 		AIModelID:            req.AIModelID,
+		FallbackAIModelID:    req.FallbackAIModelID,
 		ExchangeID:           req.ExchangeID,
 		StrategyID:           req.StrategyID, // Associated strategy ID (new version)
 		InitialBalance:       actualBalance,  // Use actual queried balance
@@ -373,12 +376,18 @@ func (s *Server) handleUpdateTrader(c *gin.Context) {
 		strategyID = existingTrader.StrategyID
 	}
 
+	fallbackAIModelID := existingTrader.FallbackAIModelID
+	if req.FallbackAIModelID != nil {
+		fallbackAIModelID = *req.FallbackAIModelID
+	}
+
 	// Update trader configuration
 	traderRecord := &store.Trader{
 		ID:                   traderID,
 		UserID:               userID,
 		Name:                 req.Name,
 		AIModelID:            req.AIModelID,
+		FallbackAIModelID:    fallbackAIModelID,
 		ExchangeID:           req.ExchangeID,
 		StrategyID:           strategyID, // Associated strategy ID
 		InitialBalance:       req.InitialBalance,

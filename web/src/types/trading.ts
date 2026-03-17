@@ -130,6 +130,7 @@ export interface TraderConfigData {
   trader_id?: string
   trader_name: string
   ai_model: string
+  fallback_ai_model: string
   exchange_id: string
   strategy_id?: string  // 策略ID
   strategy_name?: string  // 策略名称

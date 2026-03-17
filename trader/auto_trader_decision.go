@@ -82,6 +82,11 @@ func (at *AutoTrader) GetStatus() map[string]interface{} {
 		"ai_provider":     aiProvider,
 	}
 
+	// Report fallback AI provider if configured
+	if at.fallbackMcpClient != nil {
+		result["fallback_ai_provider"] = at.config.FallbackAIModel
+	}
+
 	// Add schedule mode info
 	primaryTimeframe := at.getPrimaryTimeframe()
 	if !at.IsGridStrategy() && primaryTimeframe != "" {

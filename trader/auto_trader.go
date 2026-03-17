@@ -94,6 +94,12 @@ type AutoTraderConfig struct {
 	CustomAPIKey    string
 	CustomModelName string
 
+	// Fallback AI configuration (used when primary AI fails)
+	FallbackAIModel     string
+	FallbackAPIKey      string
+	FallbackAPIURL      string
+	FallbackModelName   string
+
 	// Scan configuration
 	ScanInterval time.Duration // Scan interval (recommended 3 minutes)
 
@@ -126,6 +132,7 @@ type AutoTrader struct {
 	config                AutoTraderConfig
 	trader                Trader // Use Trader interface (supports multiple platforms)
 	mcpClient             mcp.AIClient
+	fallbackMcpClient     mcp.AIClient  // Fallback AI client (nil if not configured)
 	store                 *store.Store           // Data storage (decision records, etc.)
 	strategyEngine        *kernel.StrategyEngine // Strategy engine (uses strategy configuration)
 	cycleNumber           int                    // Current cycle number
@@ -193,16 +200,18 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	}
 
 	// Create client via registry (covers all registered providers)
+	// Use WithMaxRetries(1) to disable internal retry — fallback channel handles retry instead
+	noRetryOpt := mcp.WithMaxRetries(1)
 	if aiModel == "custom" {
-		mcpClient = mcp.New()
+		mcpClient = mcp.NewClient(noRetryOpt)
 	} else if aiModel == "" {
 		aiModel = "deepseek"
-		mcpClient = mcp.NewAIClientByProvider(aiModel)
+		mcpClient = mcp.NewAIClientByProvider(aiModel, noRetryOpt)
 	} else {
-		mcpClient = mcp.NewAIClientByProvider(aiModel)
+		mcpClient = mcp.NewAIClientByProvider(aiModel, noRetryOpt)
 	}
 	if mcpClient == nil {
-		mcpClient = mcp.New()
+		mcpClient = mcp.NewClient(noRetryOpt)
 	}
 
 	// Payment providers (claw402) ignore customURL
@@ -212,10 +221,32 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	default:
 		mcpClient.SetAPIKey(apiKey, customURL, config.CustomModelName)
 	}
-	logger.Infof("🤖 [%s] Using %s AI", config.Name, aiModel)
+	logger.Infof("🤖 [%s] Using %s AI (primary, no internal retry)", config.Name, aiModel)
 
 	if config.CustomAPIURL != "" || config.CustomModelName != "" {
 		logger.Infof("🔧 [%s] Custom config - URL: %s, Model: %s", config.Name, config.CustomAPIURL, config.CustomModelName)
+	}
+
+	// Initialize fallback AI client (if configured)
+	var fallbackMcpClient mcp.AIClient
+	if config.FallbackAIModel != "" && config.FallbackAPIKey != "" {
+		fallbackModel := config.FallbackAIModel
+		if fallbackModel == "custom" {
+			fallbackMcpClient = mcp.NewClient(noRetryOpt)
+		} else {
+			fallbackMcpClient = mcp.NewAIClientByProvider(fallbackModel, noRetryOpt)
+		}
+		if fallbackMcpClient == nil {
+			fallbackMcpClient = mcp.NewClient(noRetryOpt)
+		}
+
+		switch fallbackModel {
+		case "blockrun-base", "blockrun-sol", "claw402":
+			fallbackMcpClient.SetAPIKey(config.FallbackAPIKey, "", config.FallbackModelName)
+		default:
+			fallbackMcpClient.SetAPIKey(config.FallbackAPIKey, config.FallbackAPIURL, config.FallbackModelName)
+		}
+		logger.Infof("🔄 [%s] Fallback AI configured: %s (no internal retry)", config.Name, fallbackModel)
 	}
 
 	// Set default trading platform
@@ -346,6 +377,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		config:                config,
 		trader:                trader,
 		mcpClient:             mcpClient,
+		fallbackMcpClient:     fallbackMcpClient,
 		store:                 st,
 		strategyEngine:        strategyEngine,
 		cycleNumber:           cycleNumber,

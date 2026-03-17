@@ -23,6 +23,7 @@ type Trader struct {
 	UserID              string    `gorm:"column:user_id;not null;default:default;index" json:"user_id"`
 	Name                string    `gorm:"column:name;not null" json:"name"`
 	AIModelID           string    `gorm:"column:ai_model_id;not null" json:"ai_model_id"`
+	FallbackAIModelID   string    `gorm:"column:fallback_ai_model_id;default:''" json:"fallback_ai_model_id"`
 	ExchangeID          string    `gorm:"column:exchange_id;not null" json:"exchange_id"`
 	StrategyID          string    `gorm:"column:strategy_id;default:''" json:"strategy_id"`
 	InitialBalance      float64   `gorm:"column:initial_balance;not null" json:"initial_balance"`
@@ -60,10 +61,8 @@ type TraderFullConfig struct {
 func (s *TraderStore) initTables() error {
 	// For PostgreSQL with existing table, skip AutoMigrate
 	if s.db.Dialector.Name() == "postgres" {
-		var tableExists int64
-		s.db.Raw(`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'traders'`).Scan(&tableExists)
-		if tableExists > 0 {
-			return nil
+		if s.db.Migrator().HasTable(&Trader{}) {
+			return s.ensureColumns()
 		}
 	}
 	// Use GORM AutoMigrate
@@ -71,6 +70,20 @@ func (s *TraderStore) initTables() error {
 		return fmt.Errorf("failed to migrate traders table: %w", err)
 	}
 	return nil
+}
+
+func (s *TraderStore) ensureColumns() error {
+	if s.db.Migrator().HasColumn(&Trader{}, "FallbackAIModelID") {
+		return nil
+	}
+
+	if err := s.db.Migrator().AddColumn(&Trader{}, "FallbackAIModelID"); err != nil {
+		return fmt.Errorf("failed to add fallback_ai_model_id column: %w", err)
+	}
+
+	return s.db.Model(&Trader{}).
+		Where("fallback_ai_model_id IS NULL").
+		Update("fallback_ai_model_id", "").Error
 }
 
 // Create creates trader
@@ -110,12 +123,13 @@ func (s *TraderStore) Update(trader *Trader) error {
 		trader.ID, trader.Name, trader.AIModelID, trader.StrategyID)
 
 	updates := map[string]interface{}{
-		"name":           trader.Name,
-		"ai_model_id":    trader.AIModelID,
-		"exchange_id":    trader.ExchangeID,
-		"strategy_id":    trader.StrategyID,
-		"is_cross_margin": trader.IsCrossMargin,
-		"show_in_competition": trader.ShowInCompetition,
+		"name":                 trader.Name,
+		"ai_model_id":          trader.AIModelID,
+		"fallback_ai_model_id": trader.FallbackAIModelID,
+		"exchange_id":          trader.ExchangeID,
+		"strategy_id":          trader.StrategyID,
+		"is_cross_margin":      trader.IsCrossMargin,
+		"show_in_competition":  trader.ShowInCompetition,
 	}
 
 	// Only update these if > 0

@@ -194,6 +194,7 @@ func TestUpdateTraderRequest_CompleteFields(t *testing.T) {
 	jsonData := `{
 		"name": "Test Trader",
 		"ai_model_id": "gpt-4",
+		"fallback_ai_model_id": "gpt-4-mini",
 		"exchange_id": "binance",
 		"initial_balance": 1000,
 		"scan_interval_minutes": 5,
@@ -219,10 +220,65 @@ func TestUpdateTraderRequest_CompleteFields(t *testing.T) {
 	if req.AIModelID != "gpt-4" {
 		t.Errorf("AIModelID mismatch: got %q", req.AIModelID)
 	}
+	if req.FallbackAIModelID == nil || *req.FallbackAIModelID != "gpt-4-mini" {
+		t.Errorf("FallbackAIModelID mismatch: got %#v", req.FallbackAIModelID)
+	}
 
 	// Verify SystemPromptTemplate field has been correctly added to struct
 	if req.SystemPromptTemplate != "nof1" {
 		t.Errorf("SystemPromptTemplate mismatch: expected %q, got %q", "nof1", req.SystemPromptTemplate)
+	}
+}
+
+func TestUpdateTraderRequest_FallbackAIModelIDOptional(t *testing.T) {
+	tests := []struct {
+		name      string
+		jsonData  string
+		wantNil   bool
+		wantValue string
+	}{
+		{
+			name: "missing fallback field keeps nil",
+			jsonData: `{
+				"name": "Test Trader",
+				"ai_model_id": "gpt-4",
+				"exchange_id": "binance"
+			}`,
+			wantNil: true,
+		},
+		{
+			name: "explicit empty fallback is preserved",
+			jsonData: `{
+				"name": "Test Trader",
+				"ai_model_id": "gpt-4",
+				"fallback_ai_model_id": "",
+				"exchange_id": "binance"
+			}`,
+			wantValue: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var req UpdateTraderRequest
+			if err := json.Unmarshal([]byte(tt.jsonData), &req); err != nil {
+				t.Fatalf("Failed to unmarshal JSON: %v", err)
+			}
+
+			if tt.wantNil {
+				if req.FallbackAIModelID != nil {
+					t.Fatalf("expected nil fallback_ai_model_id, got %#v", req.FallbackAIModelID)
+				}
+				return
+			}
+
+			if req.FallbackAIModelID == nil {
+				t.Fatal("expected fallback_ai_model_id to be present")
+			}
+			if *req.FallbackAIModelID != tt.wantValue {
+				t.Fatalf("expected fallback_ai_model_id=%q, got %q", tt.wantValue, *req.FallbackAIModelID)
+			}
+		})
 	}
 }
 

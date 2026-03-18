@@ -46,19 +46,18 @@ func NewDeepSeekClientWithOptions(opts ...mcp.ClientOption) mcp.AIClient {
 
 func (dsClient *DeepSeekClient) SetAPIKey(apiKey string, customURL string, customModel string) {
 	dsClient.APIKey = apiKey
+	mcp.ApplyAPIOverrides(dsClient.Client, customURL, customModel)
 
 	if len(apiKey) > 8 {
 		dsClient.Log.Infof("🔧 [MCP] DeepSeek API Key: %s...%s", apiKey[:4], apiKey[len(apiKey)-4:])
 	}
 	if customURL != "" {
-		dsClient.BaseURL = customURL
-		dsClient.Log.Infof("🔧 [MCP] DeepSeek using custom BaseURL: %s", customURL)
+		dsClient.Log.Infof("🔧 [MCP] DeepSeek using custom BaseURL: %s", dsClient.BaseURL)
 	} else {
 		dsClient.Log.Infof("🔧 [MCP] DeepSeek using default BaseURL: %s", dsClient.BaseURL)
 	}
 	if customModel != "" {
-		dsClient.Model = customModel
-		dsClient.Log.Infof("🔧 [MCP] DeepSeek using custom Model: %s", customModel)
+		dsClient.Log.Infof("🔧 [MCP] DeepSeek using custom Model: %s", dsClient.Model)
 	} else {
 		dsClient.Log.Infof("🔧 [MCP] DeepSeek using default Model: %s", dsClient.Model)
 	}

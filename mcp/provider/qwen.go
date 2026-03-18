@@ -51,19 +51,18 @@ func NewQwenClientWithOptions(opts ...mcp.ClientOption) mcp.AIClient {
 
 func (qwenClient *QwenClient) SetAPIKey(apiKey string, customURL string, customModel string) {
 	qwenClient.APIKey = apiKey
+	mcp.ApplyAPIOverrides(qwenClient.Client, customURL, customModel)
 
 	if len(apiKey) > 8 {
 		qwenClient.Log.Infof("🔧 [MCP] Qwen API Key: %s...%s", apiKey[:4], apiKey[len(apiKey)-4:])
 	}
 	if customURL != "" {
-		qwenClient.BaseURL = customURL
-		qwenClient.Log.Infof("🔧 [MCP] Qwen using custom BaseURL: %s", customURL)
+		qwenClient.Log.Infof("🔧 [MCP] Qwen using custom BaseURL: %s", qwenClient.BaseURL)
 	} else {
 		qwenClient.Log.Infof("🔧 [MCP] Qwen using default BaseURL: %s", qwenClient.BaseURL)
 	}
 	if customModel != "" {
-		qwenClient.Model = customModel
-		qwenClient.Log.Infof("🔧 [MCP] Qwen using custom Model: %s", customModel)
+		qwenClient.Log.Infof("🔧 [MCP] Qwen using custom Model: %s", qwenClient.Model)
 	} else {
 		qwenClient.Log.Infof("🔧 [MCP] Qwen using default Model: %s", qwenClient.Model)
 	}

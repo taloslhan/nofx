@@ -142,21 +142,29 @@ func NewClient(opts ...ClientOption) AIClient {
 	return client
 }
 
-// SetCustomAPI sets custom OpenAI-compatible API
+// ApplyAPIOverrides updates endpoint/model overrides while preserving provider defaults
+// when overrides are omitted. A trailing "#" means apiURL is already the full endpoint.
+func ApplyAPIOverrides(client *Client, apiURL, customModel string) {
+	if apiURL != "" {
+		if strings.HasSuffix(apiURL, "#") {
+			client.BaseURL = strings.TrimSuffix(apiURL, "#")
+			client.UseFullURL = true
+		} else {
+			client.BaseURL = apiURL
+			client.UseFullURL = false
+		}
+	}
+
+	if customModel != "" {
+		client.Model = customModel
+	}
+}
+
+// SetAPIKey sets API credentials for the base client.
 func (client *Client) SetAPIKey(apiKey, apiURL, customModel string) {
 	client.Provider = ProviderCustom
 	client.APIKey = apiKey
-
-	// Check if URL ends with #, if so use full URL (without appending /chat/completions)
-	if strings.HasSuffix(apiURL, "#") {
-		client.BaseURL = strings.TrimSuffix(apiURL, "#")
-		client.UseFullURL = true
-	} else {
-		client.BaseURL = apiURL
-		client.UseFullURL = false
-	}
-
-	client.Model = customModel
+	ApplyAPIOverrides(client, apiURL, customModel)
 }
 
 func (client *Client) SetTimeout(timeout time.Duration) {

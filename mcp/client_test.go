@@ -321,6 +321,30 @@ func TestClient_SetAuthHeader(t *testing.T) {
 	}
 }
 
+func TestClient_SetAPIKeyPreservesDefaultsWhenOverridesMissing(t *testing.T) {
+	client := NewClient(
+		WithProvider("test-provider"),
+		WithBaseURL("https://api.test.com/v1"),
+		WithModel("test-model"),
+	)
+	c := client.(*Client)
+
+	c.SetAPIKey("sk-test", "", "")
+
+	if c.Provider != ProviderCustom {
+		t.Fatalf("expected provider %q, got %q", ProviderCustom, c.Provider)
+	}
+	if c.BaseURL != "https://api.test.com/v1" {
+		t.Fatalf("expected BaseURL to be preserved, got %q", c.BaseURL)
+	}
+	if c.Model != "test-model" {
+		t.Fatalf("expected Model to be preserved, got %q", c.Model)
+	}
+	if c.UseFullURL {
+		t.Fatal("expected UseFullURL to remain false")
+	}
+}
+
 func TestClient_IsRetryableError(t *testing.T) {
 	client := NewClient()
 	c := client.(*Client)

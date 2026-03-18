@@ -67,16 +67,15 @@ func NewClaudeClientWithOptions(opts ...mcp.ClientOption) mcp.AIClient {
 // SetAPIKey stores credentials and optional custom endpoint / model.
 func (c *ClaudeClient) SetAPIKey(apiKey, customURL, customModel string) {
 	c.APIKey = apiKey
+	mcp.ApplyAPIOverrides(c.Client, customURL, customModel)
 	if len(apiKey) > 8 {
 		c.Log.Infof("🔧 [MCP] Claude API Key: %s...%s", apiKey[:4], apiKey[len(apiKey)-4:])
 	}
 	if customURL != "" {
-		c.BaseURL = customURL
-		c.Log.Infof("🔧 [MCP] Claude BaseURL: %s", customURL)
+		c.Log.Infof("🔧 [MCP] Claude BaseURL: %s", c.BaseURL)
 	}
 	if customModel != "" {
-		c.Model = customModel
-		c.Log.Infof("🔧 [MCP] Claude Model: %s", customModel)
+		c.Log.Infof("🔧 [MCP] Claude Model: %s", c.Model)
 	}
 }
 
@@ -88,6 +87,9 @@ func (c *ClaudeClient) SetAuthHeader(h http.Header) {
 
 // BuildUrl targets /messages instead of /chat/completions.
 func (c *ClaudeClient) BuildUrl() string {
+	if c.UseFullURL {
+		return c.BaseURL
+	}
 	return fmt.Sprintf("%s/messages", c.BaseURL)
 }
 

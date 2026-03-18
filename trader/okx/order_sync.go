@@ -254,7 +254,7 @@ func (t *OKXTrader) SyncOrdersFromOKX(traderID string, exchangeID string, exchan
 		if err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, positionSide, trade.OrderAction,
-			trade.FillQtyBase, trade.FillPrice, trade.Fee, 0, // No per-trade PnL from OKX
+			trade.FillQtyBase, trade.FillPrice, trade.Fee, 0, 0, // No per-trade PnL from OKX
 			execTimeMs, trade.TradeID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)

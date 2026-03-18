@@ -29,11 +29,12 @@ func NewPositionBuilder(positionStore *PositionStore) *PositionBuilder {
 func (pb *PositionBuilder) ProcessTrade(
 	traderID, exchangeID, exchangeType, symbol, side, action string,
 	quantity, price, fee, realizedPnL float64,
+	leverage int,
 	tradeTimeMs int64,
 	orderID string,
 ) error {
 	if strings.HasPrefix(action, "open_") {
-		return pb.handleOpen(traderID, exchangeID, exchangeType, symbol, side, quantity, price, fee, tradeTimeMs, orderID)
+		return pb.handleOpen(traderID, exchangeID, exchangeType, symbol, side, quantity, price, fee, leverage, tradeTimeMs, orderID)
 	} else if strings.HasPrefix(action, "close_") {
 		return pb.handleClose(traderID, exchangeID, exchangeType, symbol, side, quantity, price, fee, realizedPnL, tradeTimeMs, orderID)
 	}
@@ -45,6 +46,7 @@ func (pb *PositionBuilder) ProcessTrade(
 func (pb *PositionBuilder) handleOpen(
 	traderID, exchangeID, exchangeType, symbol, side string,
 	quantity, price, fee float64,
+	leverage int,
 	tradeTimeMs int64,
 	orderID string,
 ) error {
@@ -54,6 +56,7 @@ func (pb *PositionBuilder) handleOpen(
 		return fmt.Errorf("failed to get open position: %w", err)
 	}
 
+	resolvedLeverage := pb.resolveLeverage(traderID, symbol, leverage)
 	nowMs := time.Now().UTC().UnixMilli()
 	if existing == nil {
 		// Create new position
@@ -68,7 +71,7 @@ func (pb *PositionBuilder) handleOpen(
 			EntryPrice:         price,
 			EntryOrderID:       orderID,
 			EntryTime:          tradeTimeMs,
-			Leverage:           1,
+			Leverage:           resolvedLeverage,
 			Status:             "OPEN",
 			Source:             "sync",
 			Fee:                fee,
@@ -88,8 +91,41 @@ func (pb *PositionBuilder) handleOpen(
 			logger.Infof("  ⚠️  Failed to update exchange info: %v", err)
 		}
 	}
+	if resolvedLeverage > 0 && existing.Leverage != resolvedLeverage {
+		if err := pb.positionStore.db.Model(&TraderPosition{}).
+			Where("id = ?", existing.ID).
+			Update("leverage", resolvedLeverage).Error; err != nil {
+			logger.Infof("  ⚠️  Failed to update leverage: %v", err)
+		}
+	}
 
 	return pb.positionStore.UpdatePositionQuantityAndPrice(existing.ID, quantity, price, fee)
+}
+
+func (pb *PositionBuilder) resolveLeverage(traderID, symbol string, leverage int) int {
+	if leverage > 0 {
+		return leverage
+	}
+
+	var trader Trader
+	err := pb.positionStore.db.
+		Select("btc_eth_leverage", "altcoin_leverage").
+		Where("id = ?", traderID).
+		First(&trader).Error
+	if err != nil {
+		return 1
+	}
+
+	symbol = strings.ToUpper(symbol)
+	if strings.HasPrefix(symbol, "BTC") || strings.HasPrefix(symbol, "ETH") {
+		if trader.BTCETHLeverage > 0 {
+			return trader.BTCETHLeverage
+		}
+	} else if trader.AltcoinLeverage > 0 {
+		return trader.AltcoinLeverage
+	}
+
+	return 1
 }
 
 // handleClose handles closing positions (partial or full)

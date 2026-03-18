@@ -185,6 +185,7 @@ func (t *FuturesTrader) GetTradesForSymbol(symbol string, startTime time.Time, l
 			Quantity:     qty,
 			RealizedPnL:  pnl,
 			Fee:          fee,
+			FeeAsset:     at.CommissionAsset,
 			Time:         time.UnixMilli(at.Time).UTC(),
 		}
 		trades = append(trades, trade)
@@ -228,6 +229,7 @@ func (t *FuturesTrader) GetTradesForSymbolFromID(symbol string, fromID int64, li
 			Quantity:     qty,
 			RealizedPnL:  pnl,
 			Fee:          fee,
+			FeeAsset:     at.CommissionAsset,
 			Time:         time.UnixMilli(at.Time).UTC(),
 		}
 		trades = append(trades, trade)

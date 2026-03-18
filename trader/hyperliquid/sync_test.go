@@ -102,7 +102,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "open_long",
-			0.1, 3500, 0.5, 0,
+			0.1, 3500, 0.5, 0, 0,
 			time.Now().UnixMilli(), "order-1",
 		)
 		if err != nil {
@@ -125,7 +125,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err = posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "close_long",
-			0.1, 3600, 0.5, 10.0, // PnL = (3600-3500)*0.1 = 10
+			0.1, 3600, 0.5, 10.0, 0, // PnL = (3600-3500)*0.1 = 10
 			time.Now().UnixMilli(), "order-2",
 		)
 		if err != nil {
@@ -151,7 +151,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "SHORT", "open_short",
-			0.05, 3500, 0.25, 0,
+			0.05, 3500, 0.25, 0, 0,
 			time.Now().UnixMilli(), "order-3",
 		)
 		if err != nil {
@@ -175,7 +175,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err = posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "SHORT", "close_short",
-			0.05, 3400, 0.25, 5.0, // PnL = (3500-3400)*0.05 = 5
+			0.05, 3400, 0.25, 5.0, 0, // PnL = (3500-3400)*0.05 = 5
 			time.Now().UnixMilli(), "order-4",
 		)
 		if err != nil {
@@ -204,7 +204,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "open_long",
-			0.1, 3500, 0.5, 0,
+			0.1, 3500, 0.5, 0, 0,
 			time.Now().UnixMilli(), "order-5",
 		)
 		if err != nil {
@@ -215,7 +215,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err = posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "open_long",
-			0.1, 3600, 0.5, 0,
+			0.1, 3600, 0.5, 0, 0,
 			time.Now().UnixMilli(), "order-6",
 		)
 		if err != nil {
@@ -242,7 +242,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err = posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "close_long",
-			0.2, 3700, 1.0, 30.0,
+			0.2, 3700, 1.0, 30.0, 0,
 			time.Now().UnixMilli(), "order-7",
 		)
 		if err != nil {
@@ -268,7 +268,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "open_long",
-			1.0, 3500, 2.0, 0,
+			1.0, 3500, 2.0, 0, 0,
 			time.Now().UnixMilli(), "order-8",
 		)
 		if err != nil {
@@ -279,7 +279,7 @@ func TestHyperliquidPositionBuilding(t *testing.T) {
 		err = posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, "LONG", "close_long",
-			0.3, 3600, 0.6, 30.0,
+			0.3, 3600, 0.6, 30.0, 0,
 			time.Now().UnixMilli(), "order-9",
 		)
 		if err != nil {
@@ -328,13 +328,13 @@ func TestHyperliquidBugScenario(t *testing.T) {
 	// Account has 30 USDT, should not be able to hold 1.7 ETH
 
 	trades := []struct {
-		action   string
-		side     string
-		symbol   string
-		qty      float64
-		price    float64
-		fee      float64
-		pnl      float64
+		action string
+		side   string
+		symbol string
+		qty    float64
+		price  float64
+		fee    float64
+		pnl    float64
 	}{
 		// Order 853: Open Short
 		{"open_short", "SHORT", "ETHUSDT", 0.0472, 3500, 0.2, 0},
@@ -350,7 +350,7 @@ func TestHyperliquidBugScenario(t *testing.T) {
 		err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			trade.symbol, trade.side, trade.action,
-			trade.qty, trade.price, trade.fee, trade.pnl,
+			trade.qty, trade.price, trade.fee, trade.pnl, 0,
 			time.Now().Add(time.Duration(i)*time.Second).UnixMilli(),
 			"",
 		)

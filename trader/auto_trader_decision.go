@@ -3,11 +3,11 @@ package trader
 import (
 	"fmt"
 	"math"
-	"nofx/telemetry"
 	"nofx/kernel"
 	"nofx/logger"
 	"nofx/market"
 	"nofx/store"
+	"nofx/telemetry"
 	"time"
 )
 
@@ -410,7 +410,7 @@ func (at *AutoTrader) recordPositionChange(orderID, symbol, side, action string,
 		if err := posBuilder.ProcessTrade(
 			at.id, at.exchangeID, at.exchange,
 			symbol, side, action,
-			quantity, price, fee, 0, // realizedPnL will be calculated
+			quantity, price, fee, 0, leverage, // realizedPnL will be calculated
 			time.Now().UTC().UnixMilli(), orderID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to process close position: %v", err)

@@ -127,7 +127,7 @@ func (t *LighterTraderV2) SyncOrdersFromLighter(traderID string, exchangeID stri
 		if err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, positionSide, orderAction,
-			trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL,
+			trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL, trade.Leverage,
 			tradeTimeMs, trade.TradeID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)

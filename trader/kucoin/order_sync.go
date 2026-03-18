@@ -268,6 +268,7 @@ func (t *KuCoinTrade) ToTradeRecord() types.TradeRecord {
 		Quantity:     t.FillQty,
 		RealizedPnL:  t.ProfitLoss,
 		Fee:          t.Fee,
+		FeeAsset:     t.FeeAsset,
 		Time:         t.ExecTime,
 	}
 }
@@ -381,7 +382,7 @@ func (t *KuCoinTrader) SyncOrdersFromKuCoin(traderID string, exchangeID string, 
 		if err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, positionSide, trade.OrderAction,
-			trade.FillQty, trade.FillPrice, trade.Fee, trade.ProfitLoss,
+			trade.FillQty, trade.FillPrice, trade.Fee, trade.ProfitLoss, 0,
 			execTimeMs, trade.TradeID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)

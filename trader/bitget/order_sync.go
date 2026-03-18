@@ -48,7 +48,6 @@ func (t *BitgetTrader) GetTrades(startTime time.Time, limit int) ([]BitgetTrade,
 		return nil, fmt.Errorf("failed to get fill history: %w", err)
 	}
 
-
 	// Bitget fill structure - supports both one-way and hedge mode
 	type BitgetFill struct {
 		TradeID    string `json:"tradeId"`
@@ -261,7 +260,7 @@ func (t *BitgetTrader) SyncOrdersFromBitget(traderID string, exchangeID string, 
 		if err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, positionSide, trade.OrderAction,
-			trade.FillQty, trade.FillPrice, trade.Fee, trade.ProfitLoss,
+			trade.FillQty, trade.FillPrice, trade.Fee, trade.ProfitLoss, 0,
 			execTimeMs, trade.TradeID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)

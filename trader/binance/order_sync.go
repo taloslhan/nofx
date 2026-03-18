@@ -203,6 +203,10 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 
 		// Create order record - use Unix milliseconds UTC
 		tradeTimeMs := trade.Time.UTC().UnixMilli()
+		commissionAsset := trade.FeeAsset
+		if commissionAsset == "" {
+			commissionAsset = "UNKNOWN"
+		}
 		orderRecord := &store.TraderOrder{
 			TraderID:        traderID,
 			ExchangeID:      exchangeID,
@@ -219,6 +223,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 			FilledQuantity:  trade.Quantity,
 			AvgFillPrice:    trade.Price,
 			Commission:      trade.Fee,
+			CommissionAsset: commissionAsset,
 			FilledAt:        tradeTimeMs,
 			CreatedAt:       tradeTimeMs,
 			UpdatedAt:       tradeTimeMs,
@@ -244,7 +249,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 			Quantity:        trade.Quantity,
 			QuoteQuantity:   trade.Price * trade.Quantity,
 			Commission:      trade.Fee,
-			CommissionAsset: "USDT",
+			CommissionAsset: commissionAsset,
 			RealizedPnL:     trade.RealizedPnL,
 			IsMaker:         false,
 			CreatedAt:       tradeTimeMs,
@@ -258,7 +263,7 @@ func (t *FuturesTrader) SyncOrdersFromBinance(traderID string, exchangeID string
 		if err := posBuilder.ProcessTrade(
 			traderID, exchangeID, exchangeType,
 			symbol, positionSide, orderAction,
-			trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL,
+			trade.Quantity, trade.Price, trade.Fee, trade.RealizedPnL, trade.Leverage,
 			tradeTimeMs, trade.TradeID,
 		); err != nil {
 			logger.Infof("  ⚠️ Failed to sync position for trade %s: %v", trade.TradeID, err)

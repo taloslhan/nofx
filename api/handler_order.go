@@ -44,6 +44,7 @@ func (s *Server) handleTraderList(c *gin.Context) {
 			"trader_id":           trader.ID,
 			"trader_name":         trader.Name,
 			"ai_model":            trader.AIModelID, // Use complete ID
+			"fallback_ai_model":   trader.FallbackAIModelID,
 			"exchange_id":         trader.ExchangeID,
 			"is_running":          isRunning,
 			"show_in_competition": trader.ShowInCompetition,

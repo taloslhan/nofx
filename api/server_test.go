@@ -318,6 +318,37 @@ func TestTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	}
 }
 
+func TestTraderListResponse_FallbackAIModel(t *testing.T) {
+	trader := &store.Trader{
+		ID:                "trader-003",
+		UserID:            "user-1",
+		Name:              "Fallback Trader",
+		AIModelID:         "gpt-4",
+		FallbackAIModelID: "gpt-4-mini",
+		ExchangeID:        "binance",
+		InitialBalance:    3000,
+		IsRunning:         false,
+	}
+
+	response := map[string]interface{}{
+		"trader_id":         trader.ID,
+		"trader_name":       trader.Name,
+		"ai_model":          trader.AIModelID,
+		"fallback_ai_model": trader.FallbackAIModelID,
+		"exchange_id":       trader.ExchangeID,
+		"is_running":        trader.IsRunning,
+		"initial_balance":   trader.InitialBalance,
+	}
+
+	if _, exists := response["fallback_ai_model"]; !exists {
+		t.Fatalf("Trader list response is missing 'fallback_ai_model' field")
+	}
+
+	if response["fallback_ai_model"] != "gpt-4-mini" {
+		t.Fatalf("Expected fallback_ai_model='gpt-4-mini', got %v", response["fallback_ai_model"])
+	}
+}
+
 // TestPublicTraderListResponse_SystemPromptTemplate Test whether trader object returned by handlePublicTraderList API contains system_prompt_template field
 func TestPublicTraderListResponse_SystemPromptTemplate(t *testing.T) {
 	// Simulate trader data returned by getConcurrentTraderData

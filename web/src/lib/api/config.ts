@@ -2,10 +2,18 @@ import type {
   AIModel,
   Exchange,
   UpdateModelConfigRequest,
+  TestModelConnectionRequest,
+  TestModelConnectionResponse,
   UpdateExchangeConfigRequest,
   CreateExchangeRequest,
 } from '../../types'
-import { API_BASE, httpClient, CryptoService } from './helpers'
+import {
+  API_BASE,
+  httpClient,
+  CryptoService,
+  getAuthHeaders,
+  handleJSONResponse,
+} from './helpers'
 
 export const configApi = {
   async getModelConfigs(): Promise<AIModel[]> {
@@ -65,6 +73,58 @@ export const configApi = {
     if (!result.success) throw new Error('Failed to update model configs')
   },
 
+  async testModelConnection(
+    request: TestModelConnectionRequest
+  ): Promise<TestModelConnectionResponse> {
+    const config = await CryptoService.fetchCryptoConfig()
+
+    if (!config.transport_encryption) {
+      const result = await httpClient.post<TestModelConnectionResponse>(
+        `${API_BASE}/models/test`,
+        request
+      )
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to test model connection')
+      }
+      return result.data!
+    }
+
+    const publicKey = await CryptoService.fetchPublicKey()
+    await CryptoService.initialize(publicKey)
+
+    const userId = localStorage.getItem('user_id') || ''
+    const sessionId = sessionStorage.getItem('session_id') || ''
+
+    const encryptedPayload = await CryptoService.encryptSensitiveData(
+      JSON.stringify(request),
+      userId,
+      sessionId
+    )
+
+    const result = await httpClient.post<TestModelConnectionResponse>(
+      `${API_BASE}/models/test`,
+      encryptedPayload
+    )
+    if (!result.success) {
+      throw new Error(result.message || 'Failed to test model connection')
+    }
+    return result.data!
+  },
+
+  async testSavedModelConnection(
+    modelId: string
+  ): Promise<TestModelConnectionResponse> {
+    const response = await fetch(
+      `${API_BASE}/models/${encodeURIComponent(modelId)}/test-saved`,
+      {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      }
+    )
+
+    return handleJSONResponse<TestModelConnectionResponse>(response)
+  },
+
   async getExchangeConfigs(): Promise<Exchange[]> {
     const result = await httpClient.get<Exchange[]>(`${API_BASE}/exchanges`)
     if (!result.success) throw new Error('Failed to fetch exchange configs')
@@ -86,19 +146,29 @@ export const configApi = {
     if (!result.success) throw new Error('Failed to update exchange configs')
   },
 
-  async createExchange(request: CreateExchangeRequest): Promise<{ id: string }> {
-    const result = await httpClient.post<{ id: string }>(`${API_BASE}/exchanges`, request)
+  async createExchange(
+    request: CreateExchangeRequest
+  ): Promise<{ id: string }> {
+    const result = await httpClient.post<{ id: string }>(
+      `${API_BASE}/exchanges`,
+      request
+    )
     if (!result.success) throw new Error('Failed to create exchange account')
     return result.data!
   },
 
-  async createExchangeEncrypted(request: CreateExchangeRequest): Promise<{ id: string }> {
+  async createExchangeEncrypted(
+    request: CreateExchangeRequest
+  ): Promise<{ id: string }> {
     // Check if transport encryption is enabled
     const config = await CryptoService.fetchCryptoConfig()
 
     if (!config.transport_encryption) {
       // Transport encryption disabled, send plaintext
-      const result = await httpClient.post<{ id: string }>(`${API_BASE}/exchanges`, request)
+      const result = await httpClient.post<{ id: string }>(
+        `${API_BASE}/exchanges`,
+        request
+      )
       if (!result.success) throw new Error('Failed to create exchange account')
       return result.data!
     }
@@ -130,7 +200,9 @@ export const configApi = {
   },
 
   async deleteExchange(exchangeId: string): Promise<void> {
-    const result = await httpClient.delete(`${API_BASE}/exchanges/${exchangeId}`)
+    const result = await httpClient.delete(
+      `${API_BASE}/exchanges/${exchangeId}`
+    )
     if (!result.success) throw new Error('Failed to delete exchange account')
   },
 

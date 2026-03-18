@@ -1,16 +1,24 @@
 import {
+  AlertCircle,
   Brain,
+  CheckCircle2,
   Landmark,
+  LoaderCircle,
   Eye,
   EyeOff,
   Copy,
   Check,
+  Zap,
 } from 'lucide-react'
 import type { AIModel, Exchange } from '../../types'
 import type { Language } from '../../i18n/translations'
 import { t } from '../../i18n/translations'
 import { getModelIcon } from '../common/ModelIcons'
 import { getExchangeIcon } from '../common/ExchangeIcons'
+import {
+  ConnectionTestFeedback,
+  type ConnectionTestState,
+} from './ConnectionTestFeedback'
 import {
   getShortName,
   AI_PROVIDER_CONFIG,
@@ -32,7 +40,9 @@ interface ConfigStatusGridProps {
   getModelUsageInfo: (modelId: string) => UsageInfo
   isExchangeInUse: (exchangeId: string) => boolean | undefined
   getExchangeUsageInfo: (exchangeId: string) => UsageInfo
+  modelTestStates: Record<string, ConnectionTestState>
   onModelClick: (modelId: string) => void
+  onTestModelConnection: (modelId: string) => void
   onExchangeClick: (exchangeId: string) => void
   onToggleExchangeAddress: (exchangeId: string) => void
   onCopyAddress: (id: string, address: string) => void
@@ -48,7 +58,9 @@ export function ConfigStatusGrid({
   getModelUsageInfo,
   isExchangeInUse,
   getExchangeUsageInfo,
+  modelTestStates,
   onModelClick,
+  onTestModelConnection,
   onExchangeClick,
   onToggleExchangeAddress,
   onCopyAddress,
@@ -68,47 +80,96 @@ export function ConfigStatusGrid({
           {configuredModels.map((model) => {
             const inUse = isModelInUse(model.id)
             const usageInfo = getModelUsageInfo(model.id)
+            const testState = modelTestStates[model.id] || {
+              status: 'idle',
+              result: null,
+            }
+            const testIcon =
+              testState.status === 'testing' ? (
+                <LoaderCircle className="w-3.5 h-3.5 animate-spin" />
+              ) : testState.status === 'success' ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : testState.status === 'error' ? (
+                <AlertCircle className="w-3.5 h-3.5" />
+              ) : (
+                <Zap className="w-3.5 h-3.5" />
+              )
+
             return (
               <div
                 key={model.id}
-                className={`group relative flex items-center justify-between p-3 rounded-md transition-all border border-transparent ${inUse ? 'opacity-80' : 'hover:bg-white/5 hover:border-white/10 cursor-pointer'
-                  } bg-black/20`}
+                className={`group relative p-3 rounded-md transition-all border border-transparent ${
+                  inUse
+                    ? 'opacity-80'
+                    : 'hover:bg-white/5 hover:border-white/10 cursor-pointer'
+                } bg-black/20`}
                 onClick={() => onModelClick(model.id)}
               >
-                <div className="flex items-center gap-4">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-sm group-hover:bg-indigo-500/30 transition-all"></div>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black border border-white/10 relative z-10">
-                      {getModelIcon(model.provider || model.id, { width: 20, height: 20 }) || (
-                        <span className="text-xs font-bold text-indigo-400">{getShortName(model.name)[0]}</span>
-                      )}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-indigo-500/20 rounded-full blur-sm group-hover:bg-indigo-500/30 transition-all"></div>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black border border-white/10 relative z-10">
+                        {getModelIcon(model.provider || model.id, {
+                          width: 20,
+                          height: 20,
+                        }) || (
+                          <span className="text-xs font-bold text-indigo-400">
+                            {getShortName(model.name)[0]}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="font-mono text-sm text-zinc-200 group-hover:text-nofx-gold transition-colors">
+                        {getShortName(model.name)}
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
+                        {model.customModelName ||
+                          AI_PROVIDER_CONFIG[model.provider]?.defaultModel ||
+                          ''}
+                      </div>
                     </div>
                   </div>
 
-                  <div className="min-w-0">
-                    <div className="font-mono text-sm text-zinc-200 group-hover:text-nofx-gold transition-colors">
-                      {getShortName(model.name)}
-                    </div>
-                    <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
-                      {model.customModelName || AI_PROVIDER_CONFIG[model.provider]?.defaultModel || ''}
-                    </div>
+                  <div
+                    className="flex items-center gap-2 shrink-0"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onTestModelConnection(model.id)}
+                      disabled={testState.status === 'testing'}
+                      aria-label={t('testSavedConnection', language)}
+                      title={t('testSavedConnectionTooltip', language)}
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {testIcon}
+                    </button>
+                    {usageInfo.totalCount > 0 ? (
+                      <span
+                        className={`text-[10px] font-mono px-2 py-1 rounded border ${
+                          usageInfo.runningCount > 0
+                            ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                            : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                        }`}
+                      >
+                        {usageInfo.runningCount}/{usageInfo.totalCount} ACTIVE
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">
+                        {language === 'zh' ? '就绪' : 'STANDBY'}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div className="text-right">
-                  {usageInfo.totalCount > 0 ? (
-                    <span className={`text-[10px] font-mono px-2 py-1 rounded border ${usageInfo.runningCount > 0
-                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                      }`}>
-                      {usageInfo.runningCount}/{usageInfo.totalCount} ACTIVE
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-mono text-zinc-600 uppercase tracking-wider">
-                      {language === 'zh' ? '就绪' : 'STANDBY'}
-                    </span>
-                  )}
-                </div>
+                <ConnectionTestFeedback
+                  state={testState}
+                  language={language}
+                  compact
+                />
               </div>
             )
           })}
@@ -116,7 +177,9 @@ export function ConfigStatusGrid({
           {configuredModels.length === 0 && (
             <div className="text-center py-10 border border-dashed border-zinc-800 rounded-lg bg-black/20">
               <Brain className="w-8 h-8 mx-auto mb-3 text-zinc-700" />
-              <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest">{t('noModelsConfigured', language)}</div>
+              <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
+                {t('noModelsConfigured', language)}
+              </div>
             </div>
           )}
         </div>
@@ -138,21 +201,28 @@ export function ConfigStatusGrid({
             return (
               <div
                 key={exchange.id}
-                className={`group relative flex items-center justify-between p-3 rounded-md transition-all border border-transparent ${inUse ? 'opacity-80' : 'hover:bg-white/5 hover:border-white/10 cursor-pointer'
-                  } bg-black/20`}
+                className={`group relative flex items-center justify-between p-3 rounded-md transition-all border border-transparent ${
+                  inUse
+                    ? 'opacity-80'
+                    : 'hover:bg-white/5 hover:border-white/10 cursor-pointer'
+                } bg-black/20`}
                 onClick={() => onExchangeClick(exchange.id)}
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="relative">
                     <div className="absolute inset-0 bg-yellow-500/20 rounded-full blur-sm group-hover:bg-yellow-500/30 transition-all"></div>
                     <div className="w-10 h-10 rounded-full flex items-center justify-center bg-black border border-white/10 relative z-10">
-                      {getExchangeIcon(exchange.exchange_type || exchange.id, { width: 20, height: 20 })}
+                      {getExchangeIcon(exchange.exchange_type || exchange.id, {
+                        width: 20,
+                        height: 20,
+                      })}
                     </div>
                   </div>
 
                   <div className="min-w-0">
                     <div className="font-mono text-sm text-zinc-200 group-hover:text-nofx-gold transition-colors truncate">
-                      {exchange.exchange_type?.toUpperCase() || getShortName(exchange.name)}
+                      {exchange.exchange_type?.toUpperCase() ||
+                        getShortName(exchange.name)}
                       <span className="text-[10px] text-zinc-500 ml-2 border border-zinc-800 px-1 rounded">
                         {exchange.account_name || 'DEFAULT'}
                       </span>
@@ -166,37 +236,56 @@ export function ConfigStatusGrid({
                 <div className="flex flex-col items-end gap-1">
                   {/* Wallet Address Display Logic */}
                   {(() => {
-                    const walletAddr = exchange.hyperliquidWalletAddr || exchange.asterUser || exchange.lighterWalletAddr
+                    const walletAddr =
+                      exchange.hyperliquidWalletAddr ||
+                      exchange.asterUser ||
+                      exchange.lighterWalletAddr
                     if (exchange.type !== 'dex' || !walletAddr) return null
                     const isVisible = visibleExchangeAddresses.has(exchange.id)
                     const isCopied = copiedId === `exchange-${exchange.id}`
 
                     return (
-                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <div
+                        className="flex items-center gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <span className="text-[10px] font-mono text-zinc-400 bg-black/40 px-1.5 py-0.5 rounded border border-zinc-800">
                           {isVisible ? walletAddr : truncateAddress(walletAddr)}
                         </span>
                         <button
-                          onClick={(e) => { e.stopPropagation(); onToggleExchangeAddress(exchange.id) }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onToggleExchangeAddress(exchange.id)
+                          }}
                           className="text-zinc-600 hover:text-zinc-300"
                         >
                           {isVisible ? <EyeOff size={10} /> : <Eye size={10} />}
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); onCopyAddress(`exchange-${exchange.id}`, walletAddr) }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onCopyAddress(`exchange-${exchange.id}`, walletAddr)
+                          }}
                           className="text-zinc-600 hover:text-nofx-gold"
                         >
-                          {isCopied ? <Check size={10} className="text-green-500" /> : <Copy size={10} />}
+                          {isCopied ? (
+                            <Check size={10} className="text-green-500" />
+                          ) : (
+                            <Copy size={10} />
+                          )}
                         </button>
                       </div>
                     )
                   })()}
 
                   {usageInfo.totalCount > 0 ? (
-                    <span className={`text-[10px] font-mono px-2 py-1 rounded border ${usageInfo.runningCount > 0
-                      ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
-                      }`}>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-1 rounded border ${
+                        usageInfo.runningCount > 0
+                          ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                          : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400'
+                      }`}
+                    >
                       {usageInfo.runningCount}/{usageInfo.totalCount} ACTIVE
                     </span>
                   ) : (
@@ -211,7 +300,9 @@ export function ConfigStatusGrid({
           {configuredExchanges.length === 0 && (
             <div className="text-center py-10 border border-dashed border-zinc-800 rounded-lg bg-black/20">
               <Landmark className="w-8 h-8 mx-auto mb-3 text-zinc-700" />
-              <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest">{t('noExchangesConfigured', language)}</div>
+              <div className="text-xs font-mono text-zinc-500 uppercase tracking-widest">
+                {t('noExchangesConfigured', language)}
+              </div>
             </div>
           )}
         </div>

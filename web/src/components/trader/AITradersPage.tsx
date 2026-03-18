@@ -16,6 +16,7 @@ import { DeepVoidBackground } from '../common/DeepVoidBackground'
 import { ExchangeConfigModal } from './ExchangeConfigModal'
 import { TelegramConfigModal } from './TelegramConfigModal'
 import { ModelConfigModal } from './ModelConfigModal'
+import type { ConnectionTestState } from './ConnectionTestFeedback'
 import { ConfigStatusGrid } from './ConfigStatusGrid'
 import { TradersList } from './TradersList'
 import {
@@ -54,6 +55,9 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     Set<string>
   >(new Set())
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [modelTestStates, setModelTestStates] = useState<
+    Record<string, ConnectionTestState>
+  >({})
 
   // Toggle wallet address visibility for a trader
   const toggleTraderAddressVisibility = (traderId: string) => {
@@ -161,6 +165,28 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       }
       return true
     }) || []
+
+  useEffect(() => {
+    const configuredModelIds =
+      allModels
+        ?.filter((model) => {
+          return (
+            model.enabled ||
+            (model.customApiUrl && model.customApiUrl.trim() !== '')
+          )
+        })
+        .map((model) => model.id) || []
+
+    setModelTestStates((prev) =>
+      Object.fromEntries(
+        configuredModelIds
+          .map((modelId) => [modelId, prev[modelId]])
+          .filter((entry): entry is [string, ConnectionTestState] =>
+            Boolean(entry[1])
+          )
+      )
+    )
+  }, [allModels])
 
   const isModelInUse = (modelId: string) => {
     return checkModelInUse(traders, modelId)
@@ -605,6 +631,52 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     }
   }
 
+  const handleTestModelConnection = async (
+    provider: string,
+    apiKey: string,
+    customApiUrl?: string,
+    customModelName?: string
+  ) => {
+    return api.testModelConnection({
+      provider,
+      api_key: apiKey,
+      custom_api_url: customApiUrl || '',
+      custom_model_name: customModelName || '',
+    })
+  }
+
+  const handleTestSavedModelConnection = async (modelId: string) => {
+    setModelTestStates((prev) => ({
+      ...prev,
+      [modelId]: { status: 'testing', result: null },
+    }))
+
+    try {
+      const result = await api.testSavedModelConnection(modelId)
+      setModelTestStates((prev) => ({
+        ...prev,
+        [modelId]: {
+          status: result.success ? 'success' : 'error',
+          result,
+        },
+      }))
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('testFailed', language)
+      setModelTestStates((prev) => ({
+        ...prev,
+        [modelId]: {
+          status: 'error',
+          result: {
+            success: false,
+            latency_ms: 0,
+            error: message,
+          },
+        },
+      }))
+    }
+  }
+
   const handleAddModel = () => {
     setEditingModel(null)
     setShowModelModal(true)
@@ -700,7 +772,9 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           getModelUsageInfo={getModelUsageInfo}
           isExchangeInUse={isExchangeInUse}
           getExchangeUsageInfo={getExchangeUsageInfo}
+          modelTestStates={modelTestStates}
           onModelClick={handleModelClick}
+          onTestModelConnection={handleTestSavedModelConnection}
           onExchangeClick={handleExchangeClick}
           onToggleExchangeAddress={toggleExchangeAddressVisibility}
           onCopyAddress={handleCopyAddress}
@@ -761,6 +835,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
             configuredModels={allModels}
             editingModelId={editingModel}
             onSave={handleSaveModelConfig}
+            onTestConnection={handleTestModelConnection}
             onDelete={handleDeleteModelConfig}
             onClose={() => {
               setShowModelModal(false)

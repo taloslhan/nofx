@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Trash2, Brain, ExternalLink } from 'lucide-react'
-import type { AIModel } from '../../types'
+import type { AIModel, TestModelConnectionResponse } from '../../types'
 import type { Language } from '../../i18n/translations'
 import { t } from '../../i18n/translations'
 import { getModelIcon } from '../common/ModelIcons'
+import {
+  ConnectionTestFeedback,
+  type ConnectionTestStatus,
+} from './ConnectionTestFeedback'
 import { ModelStepIndicator } from './ModelStepIndicator'
 import { ModelCard } from './ModelCard'
 import {
@@ -23,6 +27,12 @@ interface ModelConfigModalProps {
     baseUrl?: string,
     modelName?: string
   ) => void
+  onTestConnection: (
+    provider: string,
+    apiKey: string,
+    baseUrl?: string,
+    modelName?: string
+  ) => Promise<TestModelConnectionResponse>
   onDelete: (modelId: string) => void
   onClose: () => void
   language: Language
@@ -33,6 +43,7 @@ export function ModelConfigModal({
   configuredModels,
   editingModelId,
   onSave,
+  onTestConnection,
   onDelete,
   onClose,
   language,
@@ -74,31 +85,59 @@ export function ModelConfigModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedModelId || !apiKey.trim()) return
-    onSave(selectedModelId, apiKey.trim(), baseUrl.trim() || undefined, modelName.trim() || undefined)
+    onSave(
+      selectedModelId,
+      apiKey.trim(),
+      baseUrl.trim() || undefined,
+      modelName.trim() || undefined
+    )
   }
 
   const availableModels = allModels || []
-  const configuredIds = new Set(configuredModels?.map(m => m.id) || [])
-  const stepLabels = [t('modelConfig.selectModel', language), t('modelConfig.configureApi', language)]
+  const configuredIds = new Set(configuredModels?.map((m) => m.id) || [])
+  const stepLabels = [
+    t('modelConfig.selectModel', language),
+    t('modelConfig.configureApi', language),
+  ]
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto backdrop-blur-sm">
       <div
         className="rounded-2xl w-full max-w-2xl relative my-8 shadow-2xl"
-        style={{ background: 'linear-gradient(180deg, #1E2329 0%, #181A20 100%)', maxHeight: 'calc(100vh - 4rem)' }}
+        style={{
+          background: 'linear-gradient(180deg, #1E2329 0%, #181A20 100%)',
+          maxHeight: 'calc(100vh - 4rem)',
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 pb-2">
           <div className="flex items-center gap-3">
             {currentStep > 0 && !editingModelId && (
-              <button type="button" onClick={handleBack} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                <svg className="w-5 h-5" style={{ color: '#848E9C' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              <button
+                type="button"
+                onClick={handleBack}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <svg
+                  className="w-5 h-5"
+                  style={{ color: '#848E9C' }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
                 </svg>
               </button>
             )}
             <h3 className="text-xl font-bold" style={{ color: '#EAECEF' }}>
-              {editingModelId ? t('editAIModel', language) : t('addAIModel', language)}
+              {editingModelId
+                ? t('editAIModel', language)
+                : t('addAIModel', language)}
             </h3>
           </div>
           <div className="flex items-center gap-2">
@@ -112,7 +151,12 @@ export function ModelConfigModal({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors" style={{ color: '#848E9C' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+              style={{ color: '#848E9C' }}
+            >
               ✕
             </button>
           </div>
@@ -126,7 +170,10 @@ export function ModelConfigModal({
         )}
 
         {/* Content */}
-        <div className="px-6 pb-6 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 16rem)' }}>
+        <div
+          className="px-6 pb-6 overflow-y-auto"
+          style={{ maxHeight: 'calc(100vh - 16rem)' }}
+        >
           {/* Step 0: Select Model */}
           {currentStep === 0 && !editingModelId && (
             <ModelSelectionStep
@@ -139,35 +186,44 @@ export function ModelConfigModal({
           )}
 
           {/* Step 1: Configure — Claw402 Dedicated UI */}
-          {(currentStep === 1 || editingModelId) && selectedModel && (selectedModel.provider === 'claw402' || selectedModel.id === 'claw402') && (
-            <Claw402ConfigForm
-              apiKey={apiKey}
-              modelName={modelName}
-              editingModelId={editingModelId}
-              onApiKeyChange={setApiKey}
-              onModelNameChange={setModelName}
-              onBack={handleBack}
-              onSubmit={handleSubmit}
-              language={language}
-            />
-          )}
+          {(currentStep === 1 || editingModelId) &&
+            selectedModel &&
+            (selectedModel.provider === 'claw402' ||
+              selectedModel.id === 'claw402') && (
+              <Claw402ConfigForm
+                provider={selectedModel.provider}
+                apiKey={apiKey}
+                modelName={modelName}
+                editingModelId={editingModelId}
+                onApiKeyChange={setApiKey}
+                onModelNameChange={setModelName}
+                onTestConnection={onTestConnection}
+                onBack={handleBack}
+                onSubmit={handleSubmit}
+                language={language}
+              />
+            )}
 
           {/* Step 1: Configure — Standard Providers (non-claw402) */}
-          {(currentStep === 1 || editingModelId) && selectedModel && selectedModel.provider !== 'claw402' && selectedModel.id !== 'claw402' && (
-            <StandardProviderConfigForm
-              selectedModel={selectedModel}
-              apiKey={apiKey}
-              baseUrl={baseUrl}
-              modelName={modelName}
-              editingModelId={editingModelId}
-              onApiKeyChange={setApiKey}
-              onBaseUrlChange={setBaseUrl}
-              onModelNameChange={setModelName}
-              onBack={handleBack}
-              onSubmit={handleSubmit}
-              language={language}
-            />
-          )}
+          {(currentStep === 1 || editingModelId) &&
+            selectedModel &&
+            selectedModel.provider !== 'claw402' &&
+            selectedModel.id !== 'claw402' && (
+              <StandardProviderConfigForm
+                selectedModel={selectedModel}
+                apiKey={apiKey}
+                baseUrl={baseUrl}
+                modelName={modelName}
+                editingModelId={editingModelId}
+                onApiKeyChange={setApiKey}
+                onBaseUrlChange={setBaseUrl}
+                onModelNameChange={setModelName}
+                onTestConnection={onTestConnection}
+                onBack={handleBack}
+                onSubmit={handleSubmit}
+                language={language}
+              />
+            )}
         </div>
       </div>
     </div>
@@ -175,6 +231,72 @@ export function ModelConfigModal({
 }
 
 // --- Sub-components for ModelConfigModal ---
+
+function useConnectionTest({
+  provider,
+  apiKey,
+  baseUrl,
+  modelName,
+  onTestConnection,
+  language,
+}: {
+  provider: string
+  apiKey: string
+  baseUrl?: string
+  modelName?: string
+  onTestConnection: (
+    provider: string,
+    apiKey: string,
+    baseUrl?: string,
+    modelName?: string
+  ) => Promise<TestModelConnectionResponse>
+  language: Language
+}) {
+  const [testStatus, setTestStatus] = useState<ConnectionTestStatus>('idle')
+  const [testResult, setTestResult] =
+    useState<TestModelConnectionResponse | null>(null)
+
+  useEffect(() => {
+    setTestStatus('idle')
+    setTestResult(null)
+  }, [provider, apiKey, baseUrl, modelName])
+
+  const handleTestConnection = async () => {
+    const trimmedAPIKey = apiKey.trim()
+    if (!provider || !trimmedAPIKey || testStatus === 'testing') {
+      return
+    }
+
+    setTestStatus('testing')
+    setTestResult(null)
+
+    try {
+      const result = await onTestConnection(
+        provider,
+        trimmedAPIKey,
+        baseUrl?.trim() || undefined,
+        modelName?.trim() || undefined
+      )
+      setTestResult(result)
+      setTestStatus(result.success ? 'success' : 'error')
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('testFailed', language)
+      setTestResult({
+        success: false,
+        latency_ms: 0,
+        error: message,
+      })
+      setTestStatus('error')
+    }
+  }
+
+  return {
+    testStatus,
+    testResult,
+    handleTestConnection,
+  }
+}
 
 function ModelSelectionStep({
   availableModels,
@@ -196,25 +318,49 @@ function ModelSelectionStep({
       </div>
 
       {/* Claw402 Featured Card */}
-      {availableModels.some(m => m.provider === 'claw402') && (
+      {availableModels.some((m) => m.provider === 'claw402') && (
         <button
           type="button"
           onClick={() => {
-            const claw = availableModels.find(m => m.provider === 'claw402')
+            const claw = availableModels.find((m) => m.provider === 'claw402')
             if (claw) onSelectModel(claw.id)
           }}
           className="w-full p-5 rounded-xl text-left transition-all hover:scale-[1.01]"
-          style={{ background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)', border: '1.5px solid rgba(37, 99, 235, 0.4)' }}
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%)',
+            border: '1.5px solid rgba(37, 99, 235, 0.4)',
+          }}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
-                <img src="/icons/claw402.png" alt="Claw402" width={40} height={40} />
+                <img
+                  src="/icons/claw402.png"
+                  alt="Claw402"
+                  width={40}
+                  height={40}
+                />
               </div>
               <div>
-                <div className="font-bold text-base" style={{ color: '#EAECEF' }}>
+                <div
+                  className="font-bold text-base"
+                  style={{ color: '#EAECEF' }}
+                >
                   Claw402
-                  <a href="https://claw402.ai" target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="ml-1.5 text-[10px] font-normal px-1.5 py-0.5 rounded" style={{ color: '#60A5FA', background: 'rgba(96, 165, 250, 0.1)' }}>↗ claw402.ai</a>
+                  <a
+                    href="https://claw402.ai"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="ml-1.5 text-[10px] font-normal px-1.5 py-0.5 rounded"
+                    style={{
+                      color: '#60A5FA',
+                      background: 'rgba(96, 165, 250, 0.1)',
+                    }}
+                  >
+                    ↗ claw402.ai
+                  </a>
                 </div>
                 <div className="text-xs mt-0.5" style={{ color: '#A0AEC0' }}>
                   {t('modelConfig.payPerCall', language)}
@@ -222,16 +368,34 @@ function ModelSelectionStep({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {configuredIds.has(availableModels.find(m => m.provider === 'claw402')?.id || '') && (
-                <div className="w-2 h-2 rounded-full" style={{ background: '#00E096' }} />
+              {configuredIds.has(
+                availableModels.find((m) => m.provider === 'claw402')?.id || ''
+              ) && (
+                <div
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: '#00E096' }}
+                />
               )}
-              <div className="px-3 py-1.5 rounded-full text-xs font-bold" style={{ background: 'linear-gradient(135deg, #2563EB, #7C3AED)', color: '#fff' }}>
+              <div
+                className="px-3 py-1.5 rounded-full text-xs font-bold"
+                style={{
+                  background: 'linear-gradient(135deg, #2563EB, #7C3AED)',
+                  color: '#fff',
+                }}
+              >
                 {'🔥 ' + t('modelConfig.recommended', language)}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 mt-3 ml-[52px]">
-            <span className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(0, 224, 150, 0.1)', color: '#00E096', border: '1px solid rgba(0, 224, 150, 0.2)' }}>
+            <span
+              className="text-[11px] px-2 py-0.5 rounded-full"
+              style={{
+                background: 'rgba(0, 224, 150, 0.1)',
+                color: '#00E096',
+                border: '1px solid rgba(0, 224, 150, 0.2)',
+              }}
+            >
               GPT · Claude · DeepSeek · Gemini · Grok · Qwen · Kimi
             </span>
           </div>
@@ -257,20 +421,29 @@ function ModelSelectionStep({
 }
 
 function Claw402ConfigForm({
+  provider,
   apiKey,
   modelName,
   editingModelId,
   onApiKeyChange,
   onModelNameChange,
+  onTestConnection,
   onBack,
   onSubmit,
   language,
 }: {
+  provider: string
   apiKey: string
   modelName: string
   editingModelId: string | null
   onApiKeyChange: (value: string) => void
   onModelNameChange: (value: string) => void
+  onTestConnection: (
+    provider: string,
+    apiKey: string,
+    baseUrl?: string,
+    modelName?: string
+  ) => Promise<TestModelConnectionResponse>
   onBack: () => void
   onSubmit: (e: React.FormEvent) => void
   language: Language
@@ -379,28 +552,56 @@ function Claw402ConfigForm({
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* Claw402 Hero Header */}
-      <div className="p-5 rounded-xl text-center" style={{ background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%)', border: '1px solid rgba(37, 99, 235, 0.3)' }}>
+      <div
+        className="p-5 rounded-xl text-center"
+        style={{
+          background:
+            'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(139, 92, 246, 0.12) 100%)',
+          border: '1px solid rgba(37, 99, 235, 0.3)',
+        }}
+      >
         <div className="w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-3 overflow-hidden">
           <img src="/icons/claw402.png" alt="Claw402" width={56} height={56} />
         </div>
-        <a href="https://claw402.ai" target="_blank" rel="noopener noreferrer" className="text-lg font-bold inline-flex items-center gap-1.5 hover:underline" style={{ color: '#EAECEF' }}>
-          Claw402 <span className="text-xs font-normal" style={{ color: '#60A5FA' }}>↗</span>
+        <a
+          href="https://claw402.ai"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-lg font-bold inline-flex items-center gap-1.5 hover:underline"
+          style={{ color: '#EAECEF' }}
+        >
+          Claw402{' '}
+          <span className="text-xs font-normal" style={{ color: '#60A5FA' }}>
+            ↗
+          </span>
         </a>
         <div className="text-sm mt-1" style={{ color: '#A0AEC0' }}>
           {t('modelConfig.allModelsClaw', language)}
         </div>
         <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
-          {['GPT', 'Claude', 'DeepSeek', 'Gemini', 'Grok', 'Qwen', 'Kimi'].map(name => (
-            <span key={name} className="text-[11px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(255,255,255,0.06)', color: '#A0AEC0' }}>
-              {name}
-            </span>
-          ))}
+          {['GPT', 'Claude', 'DeepSeek', 'Gemini', 'Grok', 'Qwen', 'Kimi'].map(
+            (name) => (
+              <span
+                key={name}
+                className="text-[11px] px-2 py-0.5 rounded-full"
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  color: '#A0AEC0',
+                }}
+              >
+                {name}
+              </span>
+            )
+          )}
         </div>
       </div>
 
       {/* Step 1: Select AI Model */}
       <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#EAECEF' }}
+        >
           <Brain className="w-4 h-4" style={{ color: '#2563EB' }} />
           {t('modelConfig.selectAiModel', language)}
         </label>
@@ -418,15 +619,23 @@ function Claw402ConfigForm({
                 className="flex items-start gap-2 px-3 py-2.5 rounded-xl text-left transition-all hover:scale-[1.02]"
                 style={{
                   background: isSelected ? 'rgba(37, 99, 235, 0.2)' : '#0B0E11',
-                  border: isSelected ? '1.5px solid #2563EB' : '1px solid #2B3139',
+                  border: isSelected
+                    ? '1.5px solid #2563EB'
+                    : '1px solid #2B3139',
                 }}
               >
                 <span className="text-base mt-0.5">{m.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold truncate" style={{ color: isSelected ? '#60A5FA' : '#EAECEF' }}>
+                  <div
+                    className="text-xs font-semibold truncate"
+                    style={{ color: isSelected ? '#60A5FA' : '#EAECEF' }}
+                  >
                     {m.name}
                   </div>
-                  <div className="text-[10px] truncate" style={{ color: '#848E9C' }}>
+                  <div
+                    className="text-[10px] truncate"
+                    style={{ color: '#848E9C' }}
+                  >
                     {m.provider} · {m.desc}
                   </div>
                   <div className="text-[10px]" style={{ color: '#00E096' }}>
@@ -434,7 +643,12 @@ function Claw402ConfigForm({
                   </div>
                 </div>
                 {isSelected && (
-                  <span className="text-[10px] mt-1" style={{ color: '#60A5FA' }}>✓</span>
+                  <span
+                    className="text-[10px] mt-1"
+                    style={{ color: '#60A5FA' }}
+                  >
+                    ✓
+                  </span>
                 )}
               </button>
             )
@@ -444,14 +658,34 @@ function Claw402ConfigForm({
 
       {/* Step 2: Wallet Setup */}
       <div className="space-y-3">
-        <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
-          <svg className="w-4 h-4" style={{ color: '#2563EB' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#EAECEF' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#2563EB' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+            />
           </svg>
           {t('modelConfig.setupWallet', language)}
         </label>
 
-        <div className="p-3 rounded-xl" style={{ background: 'rgba(37, 99, 235, 0.06)', border: '1px solid rgba(37, 99, 235, 0.15)' }}>
+        <div
+          className="p-3 rounded-xl"
+          style={{
+            background: 'rgba(37, 99, 235, 0.06)',
+            border: '1px solid rgba(37, 99, 235, 0.15)',
+          }}
+        >
           <div className="text-xs mb-2" style={{ color: '#A0AEC0' }}>
             {t('modelConfig.walletInfo', language)}
           </div>
@@ -545,9 +779,7 @@ function Claw402ConfigForm({
 
           <div className="flex items-start gap-1.5 text-[11px]" style={{ color: '#848E9C' }}>
             <span className="mt-px">🔒</span>
-            <span>
-              {t('modelConfig.privateKeyNote', language)}
-            </span>
+            <span>{t('modelConfig.privateKeyNote', language)}</span>
           </div>
         </div>
 
@@ -687,30 +919,72 @@ function Claw402ConfigForm({
       </div>
 
       {/* USDC Recharge Guide */}
-      <div className="p-4 rounded-xl" style={{ background: 'rgba(0, 224, 150, 0.05)', border: '1px solid rgba(0, 224, 150, 0.15)' }}>
-        <div className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#00E096' }}>
+      <div
+        className="p-4 rounded-xl"
+        style={{
+          background: 'rgba(0, 224, 150, 0.05)',
+          border: '1px solid rgba(0, 224, 150, 0.15)',
+        }}
+      >
+        <div
+          className="text-sm font-semibold mb-2 flex items-center gap-2"
+          style={{ color: '#00E096' }}
+        >
           {'💰 ' + t('modelConfig.howToFundUsdc', language)}
         </div>
         <div className="text-xs space-y-1.5" style={{ color: '#848E9C' }}>
           <div className="flex items-start gap-2">
-            <span className="font-bold" style={{ color: '#A0AEC0' }}>1.</span>
+            <span className="font-bold" style={{ color: '#A0AEC0' }}>
+              1.
+            </span>
             <span>{t('modelConfig.fundStep1', language)}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="font-bold" style={{ color: '#A0AEC0' }}>2.</span>
+            <span className="font-bold" style={{ color: '#A0AEC0' }}>
+              2.
+            </span>
             <span>{t('modelConfig.fundStep2', language)}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="font-bold" style={{ color: '#A0AEC0' }}>3.</span>
+            <span className="font-bold" style={{ color: '#A0AEC0' }}>
+              3.
+            </span>
             <span>{t('modelConfig.fundStep3', language)}</span>
           </div>
         </div>
       </div>
 
       {/* Buttons */}
+      <ConnectionTestFeedback
+        state={{ status: testStatus, result: testResult }}
+        language={language}
+      />
+
       <div className="flex gap-3 pt-2">
-        <button type="button" onClick={onBack} className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all hover:bg-white/5" style={{ background: '#2B3139', color: '#848E9C' }}>
-          {editingModelId ? t('cancel', language) : t('modelConfig.back', language)}
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all hover:bg-white/5"
+          style={{ background: '#2B3139', color: '#848E9C' }}
+        >
+          {editingModelId
+            ? t('cancel', language)
+            : t('modelConfig.back', language)}
+        </button>
+        <button
+          type="button"
+          onClick={handleTestConnection}
+          disabled={!apiKey.trim() || testStatus === 'testing'}
+          className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: '#0B0E11',
+            border: '1px solid #2B3139',
+            color: '#EAECEF',
+          }}
+        >
+          {testStatus === 'testing'
+            ? t('testingConnection', language)
+            : t('testConnection', language)}
         </button>
         <button
           type="submit"
@@ -734,6 +1008,7 @@ function StandardProviderConfigForm({
   onApiKeyChange,
   onBaseUrlChange,
   onModelNameChange,
+  onTestConnection,
   onBack,
   onSubmit,
   language,
@@ -746,17 +1021,40 @@ function StandardProviderConfigForm({
   onApiKeyChange: (value: string) => void
   onBaseUrlChange: (value: string) => void
   onModelNameChange: (value: string) => void
+  onTestConnection: (
+    provider: string,
+    apiKey: string,
+    baseUrl?: string,
+    modelName?: string
+  ) => Promise<TestModelConnectionResponse>
   onBack: () => void
   onSubmit: (e: React.FormEvent) => void
   language: Language
 }) {
+  const { testStatus, testResult, handleTestConnection } = useConnectionTest({
+    provider: selectedModel.provider,
+    apiKey,
+    baseUrl,
+    modelName,
+    onTestConnection,
+    language,
+  })
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       {/* Selected Model Header */}
-      <div className="p-4 rounded-xl flex items-center gap-4" style={{ background: '#0B0E11', border: '1px solid #2B3139' }}>
+      <div
+        className="p-4 rounded-xl flex items-center gap-4"
+        style={{ background: '#0B0E11', border: '1px solid #2B3139' }}
+      >
         <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-black border border-white/10">
-          {getModelIcon(selectedModel.provider || selectedModel.id, { width: 32, height: 32 }) || (
-            <span className="text-lg font-bold" style={{ color: '#A78BFA' }}>{selectedModel.name[0]}</span>
+          {getModelIcon(selectedModel.provider || selectedModel.id, {
+            width: 32,
+            height: 32,
+          }) || (
+            <span className="text-lg font-bold" style={{ color: '#A78BFA' }}>
+              {selectedModel.name[0]}
+            </span>
           )}
         </div>
         <div className="flex-1">
@@ -764,7 +1062,9 @@ function StandardProviderConfigForm({
             {getShortName(selectedModel.name)}
           </div>
           <div className="text-xs" style={{ color: '#848E9C' }}>
-            {selectedModel.provider} • {AI_PROVIDER_CONFIG[selectedModel.provider]?.defaultModel || selectedModel.id}
+            {selectedModel.provider} •{' '}
+            {AI_PROVIDER_CONFIG[selectedModel.provider]?.defaultModel ||
+              selectedModel.id}
           </div>
         </div>
         {AI_PROVIDER_CONFIG[selectedModel.provider] && (
@@ -773,7 +1073,10 @@ function StandardProviderConfigForm({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all hover:scale-105"
-            style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.3)' }}
+            style={{
+              background: 'rgba(139, 92, 246, 0.1)',
+              border: '1px solid rgba(139, 92, 246, 0.3)',
+            }}
           >
             <ExternalLink className="w-4 h-4" style={{ color: '#A78BFA' }} />
             <span className="text-sm font-medium" style={{ color: '#A78BFA' }}>
@@ -785,7 +1088,13 @@ function StandardProviderConfigForm({
 
       {/* Kimi Warning */}
       {selectedModel.provider === 'kimi' && (
-        <div className="p-4 rounded-xl" style={{ background: 'rgba(246, 70, 93, 0.1)', border: '1px solid rgba(246, 70, 93, 0.3)' }}>
+        <div
+          className="p-4 rounded-xl"
+          style={{
+            background: 'rgba(246, 70, 93, 0.1)',
+            border: '1px solid rgba(246, 70, 93, 0.3)',
+          }}
+        >
           <div className="flex items-start gap-2">
             <span style={{ fontSize: '16px' }}>⚠️</span>
             <div className="text-sm" style={{ color: '#F6465D' }}>
@@ -797,9 +1106,23 @@ function StandardProviderConfigForm({
 
       {/* API Key / Wallet Private Key */}
       <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: '#EAECEF' }}>
-          <svg className="w-4 h-4" style={{ color: '#A78BFA' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#EAECEF' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#A78BFA' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+            />
           </svg>
           {'API Key *'}
         </label>
@@ -809,7 +1132,11 @@ function StandardProviderConfigForm({
           onChange={(e) => onApiKeyChange(e.target.value)}
           placeholder={t('enterAPIKey', language)}
           className="w-full px-4 py-3 rounded-xl"
-          style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+          style={{
+            background: '#0B0E11',
+            border: '1px solid #2B3139',
+            color: '#EAECEF',
+          }}
           required
         />
       </div>
@@ -858,8 +1185,17 @@ function StandardProviderConfigForm({
 
 
       {/* Info Box */}
-      <div className="p-4 rounded-xl" style={{ background: 'rgba(139, 92, 246, 0.1)', border: '1px solid rgba(139, 92, 246, 0.2)' }}>
-        <div className="text-sm font-semibold mb-2 flex items-center gap-2" style={{ color: '#A78BFA' }}>
+      <div
+        className="p-4 rounded-xl"
+        style={{
+          background: 'rgba(139, 92, 246, 0.1)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+        }}
+      >
+        <div
+          className="text-sm font-semibold mb-2 flex items-center gap-2"
+          style={{ color: '#A78BFA' }}
+        >
           <Brain className="w-4 h-4" />
           {t('information', language)}
         </div>
@@ -871,9 +1207,38 @@ function StandardProviderConfigForm({
       </div>
 
       {/* Buttons */}
+      <ConnectionTestFeedback
+        state={{ status: testStatus, result: testResult }}
+        language={language}
+      />
+
       <div className="flex gap-3 pt-4">
-        <button type="button" onClick={onBack} className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all hover:bg-white/5" style={{ background: '#2B3139', color: '#848E9C' }}>
-          {editingModelId ? t('cancel', language) : t('modelConfig.back', language)}
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all hover:bg-white/5"
+          style={{ background: '#2B3139', color: '#848E9C' }}
+        >
+          {editingModelId
+            ? t('cancel', language)
+            : t('modelConfig.back', language)}
+        </button>
+        <button
+          type="button"
+          onClick={handleTestConnection}
+          disabled={
+            !selectedModel || !apiKey.trim() || testStatus === 'testing'
+          }
+          className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{
+            background: '#0B0E11',
+            border: '1px solid #2B3139',
+            color: '#EAECEF',
+          }}
+        >
+          {testStatus === 'testing'
+            ? t('testingConnection', language)
+            : t('testConnection', language)}
         </button>
         <button
           type="submit"
@@ -882,8 +1247,18 @@ function StandardProviderConfigForm({
           style={{ background: '#8B5CF6', color: '#fff' }}
         >
           {t('saveConfig', language)}
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          <svg
+            className="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M14 5l7 7m0 0l-7 7m7-7H3"
+            />
           </svg>
         </button>
       </div>

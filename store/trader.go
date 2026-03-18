@@ -27,6 +27,7 @@ type Trader struct {
 	ExchangeID          string    `gorm:"column:exchange_id;not null" json:"exchange_id"`
 	StrategyID          string    `gorm:"column:strategy_id;default:''" json:"strategy_id"`
 	InitialBalance      float64   `gorm:"column:initial_balance;not null" json:"initial_balance"`
+	StatsResetTime      int64     `gorm:"column:stats_reset_time;default:0" json:"stats_reset_time,omitempty"`
 	ScanIntervalMinutes int       `gorm:"column:scan_interval_minutes;default:3" json:"scan_interval_minutes"`
 	IsRunning           bool      `gorm:"column:is_running;default:false" json:"is_running"`
 	IsCrossMargin       bool      `gorm:"column:is_cross_margin;default:true" json:"is_cross_margin"`
@@ -73,17 +74,25 @@ func (s *TraderStore) initTables() error {
 }
 
 func (s *TraderStore) ensureColumns() error {
-	if s.db.Migrator().HasColumn(&Trader{}, "FallbackAIModelID") {
-		return nil
+	if !s.db.Migrator().HasColumn(&Trader{}, "FallbackAIModelID") {
+		if err := s.db.Migrator().AddColumn(&Trader{}, "FallbackAIModelID"); err != nil {
+			return fmt.Errorf("failed to add fallback_ai_model_id column: %w", err)
+		}
+
+		if err := s.db.Model(&Trader{}).
+			Where("fallback_ai_model_id IS NULL").
+			Update("fallback_ai_model_id", "").Error; err != nil {
+			return err
+		}
 	}
 
-	if err := s.db.Migrator().AddColumn(&Trader{}, "FallbackAIModelID"); err != nil {
-		return fmt.Errorf("failed to add fallback_ai_model_id column: %w", err)
+	if !s.db.Migrator().HasColumn(&Trader{}, "StatsResetTime") {
+		if err := s.db.Migrator().AddColumn(&Trader{}, "StatsResetTime"); err != nil {
+			return fmt.Errorf("failed to add stats_reset_time column: %w", err)
+		}
 	}
 
-	return s.db.Model(&Trader{}).
-		Where("fallback_ai_model_id IS NULL").
-		Update("fallback_ai_model_id", "").Error
+	return nil
 }
 
 // Create creates trader
@@ -122,6 +131,11 @@ func (s *TraderStore) Update(trader *Trader) error {
 	fmt.Printf("📝 TraderStore.Update: ID=%s, Name=%s, AIModelID=%s, StrategyID=%s\n",
 		trader.ID, trader.Name, trader.AIModelID, trader.StrategyID)
 
+	var existing Trader
+	if err := s.db.Select("initial_balance").Where("id = ? AND user_id = ?", trader.ID, trader.UserID).First(&existing).Error; err != nil {
+		return err
+	}
+
 	updates := map[string]interface{}{
 		"name":                 trader.Name,
 		"ai_model_id":          trader.AIModelID,
@@ -135,6 +149,9 @@ func (s *TraderStore) Update(trader *Trader) error {
 	// Only update these if > 0
 	if trader.InitialBalance > 0 {
 		updates["initial_balance"] = trader.InitialBalance
+		if existing.InitialBalance != trader.InitialBalance {
+			updates["stats_reset_time"] = time.Now().UTC().UnixMilli()
+		}
 	}
 	if trader.ScanIntervalMinutes > 0 {
 		updates["scan_interval_minutes"] = trader.ScanIntervalMinutes
@@ -152,7 +169,10 @@ func (s *TraderStore) Update(trader *Trader) error {
 func (s *TraderStore) UpdateInitialBalance(userID, id string, newBalance float64) error {
 	return s.db.Model(&Trader{}).
 		Where("id = ? AND user_id = ?", id, userID).
-		Update("initial_balance", newBalance).Error
+		Updates(map[string]interface{}{
+			"initial_balance":  newBalance,
+			"stats_reset_time": time.Now().UTC().UnixMilli(),
+		}).Error
 }
 
 // UpdateCustomPrompt updates custom prompt

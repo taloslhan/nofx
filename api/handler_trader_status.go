@@ -182,12 +182,14 @@ func (s *Server) handleSyncBalance(c *gin.Context) {
 
 	logger.Infof("✅ Synced balance: %.2f → %.2f USDT (%s %.2f%%)", oldBalance, actualBalance, changeType, changePercent)
 
+	resetTime := time.Now().UTC().UnixMilli()
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "Balance synced successfully",
-		"old_balance":    oldBalance,
-		"new_balance":    actualBalance,
-		"change_percent": changePercent,
-		"change_type":    changeType,
+		"message":          "Balance synced successfully",
+		"old_balance":      oldBalance,
+		"new_balance":      actualBalance,
+		"change_percent":   changePercent,
+		"change_type":      changeType,
+		"stats_reset_time": resetTime,
 	})
 }
 

@@ -4,21 +4,44 @@ import (
 	"fmt"
 	"math"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // TraderStats trading statistics metrics
 type TraderStats struct {
-	TotalTrades    int     `json:"total_trades"`
-	WinTrades      int     `json:"win_trades"`
-	LossTrades     int     `json:"loss_trades"`
-	WinRate        float64 `json:"win_rate"`
-	ProfitFactor   float64 `json:"profit_factor"`
-	SharpeRatio    float64 `json:"sharpe_ratio"`
-	TotalPnL       float64 `json:"total_pnl"`
-	TotalFee       float64 `json:"total_fee"`
-	AvgWin         float64 `json:"avg_win"`
-	AvgLoss        float64 `json:"avg_loss"`
-	MaxDrawdownPct float64 `json:"max_drawdown_pct"`
+	TotalTrades      int     `json:"total_trades"`
+	WinTrades        int     `json:"win_trades"`
+	LossTrades       int     `json:"loss_trades"`
+	WinRate          float64 `json:"win_rate"`
+	ProfitFactor     float64 `json:"profit_factor"`
+	SharpeRatio      float64 `json:"sharpe_ratio"`
+	TotalPnL         float64 `json:"total_pnl"`
+	GrossRealizedPnL float64 `json:"gross_realized_pnl"`
+	NetPnL           float64 `json:"net_pnl"`
+	TotalFee         float64 `json:"total_fee"`
+	AvgWin           float64 `json:"avg_win"`
+	AvgLoss          float64 `json:"avg_loss"`
+	MaxDrawdownPct   float64 `json:"max_drawdown_pct"`
+}
+
+func (s *PositionStore) getStatsResetTime(traderID string) int64 {
+	var trader Trader
+	if err := s.db.Select("stats_reset_time").Where("id = ?", traderID).First(&trader).Error; err != nil {
+		return 0
+	}
+	if trader.StatsResetTime < 0 {
+		return 0
+	}
+	return trader.StatsResetTime
+}
+
+func (s *PositionStore) closedPositionQuery(traderID string) *gorm.DB {
+	query := s.db.Model(&TraderPosition{}).Where("trader_id = ? AND status = ?", traderID, "CLOSED")
+	if cutoff := s.getStatsResetTime(traderID); cutoff > 0 {
+		query = query.Where("exit_time >= ?", cutoff)
+	}
+	return query
 }
 
 // GetPositionStats gets position statistics
@@ -33,9 +56,8 @@ func (s *PositionStore) GetPositionStats(traderID string) (map[string]interface{
 	}
 	var r result
 
-	err := s.db.Model(&TraderPosition{}).
+	err := s.closedPositionQuery(traderID).
 		Select("COUNT(*) as total, SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins, COALESCE(SUM(realized_pnl), 0) as total_pnl, COALESCE(SUM(fee), 0) as total_fee").
-		Where("trader_id = ? AND status = ?", traderID, "CLOSED").
 		Scan(&r).Error
 	if err != nil {
 		return nil, err
@@ -44,7 +66,9 @@ func (s *PositionStore) GetPositionStats(traderID string) (map[string]interface{
 	stats["total_trades"] = r.Total
 	stats["win_trades"] = r.Wins
 	stats["total_pnl"] = r.TotalPnL
+	stats["gross_realized_pnl"] = r.TotalPnL
 	stats["total_fee"] = r.TotalFee
+	stats["net_pnl"] = r.TotalPnL - r.TotalFee
 	if r.Total > 0 {
 		stats["win_rate"] = float64(r.Wins) / float64(r.Total) * 100
 	} else {
@@ -59,7 +83,7 @@ func (s *PositionStore) GetFullStats(traderID string) (*TraderStats, error) {
 	stats := &TraderStats{}
 
 	var count int64
-	if err := s.db.Model(&TraderPosition{}).Where("trader_id = ? AND status = ?", traderID, "CLOSED").Count(&count).Error; err != nil {
+	if err := s.closedPositionQuery(traderID).Count(&count).Error; err != nil {
 		return nil, err
 	}
 	if count == 0 {
@@ -67,7 +91,7 @@ func (s *PositionStore) GetFullStats(traderID string) (*TraderStats, error) {
 	}
 
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").
+	err := s.closedPositionQuery(traderID).
 		Order("exit_time ASC").
 		Find(&positions).Error
 	if err != nil {
@@ -110,6 +134,8 @@ func (s *PositionStore) GetFullStats(traderID string) (*TraderStats, error) {
 	if len(pnls) > 0 {
 		stats.MaxDrawdownPct = calculateMaxDrawdownFromPnls(pnls)
 	}
+	stats.GrossRealizedPnL = stats.TotalPnL
+	stats.NetPnL = stats.TotalPnL - stats.TotalFee
 
 	return stats, nil
 }
@@ -130,7 +156,7 @@ type RecentTrade struct {
 // GetRecentTrades gets recent closed trades
 func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTrade, error) {
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").
+	err := s.closedPositionQuery(traderID).
 		Order("exit_time DESC").
 		Limit(limit).
 		Find(&positions).Error
@@ -235,7 +261,7 @@ type SymbolStats struct {
 // GetSymbolStats gets per-symbol trading statistics
 func (s *PositionStore) GetSymbolStats(traderID string, limit int) ([]SymbolStats, error) {
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").Find(&positions).Error
+	err := s.closedPositionQuery(traderID).Find(&positions).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query symbol stats: %w", err)
 	}
@@ -305,14 +331,14 @@ type HoldingTimeStats struct {
 // GetHoldingTimeStats analyzes performance by holding duration
 func (s *PositionStore) GetHoldingTimeStats(traderID string) ([]HoldingTimeStats, error) {
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ? AND exit_time > 0", traderID, "CLOSED").Find(&positions).Error
+	err := s.closedPositionQuery(traderID).Where("exit_time > 0").Find(&positions).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query holding time stats: %w", err)
 	}
 
 	rangeStats := map[string]*struct {
-		count   int
-		wins    int
+		count    int
+		wins     int
 		totalPnL float64
 	}{
 		"<1h":   {},
@@ -375,7 +401,7 @@ type DirectionStats struct {
 // GetDirectionStats analyzes long vs short performance
 func (s *PositionStore) GetDirectionStats(traderID string) ([]DirectionStats, error) {
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").Find(&positions).Error
+	err := s.closedPositionQuery(traderID).Find(&positions).Error
 	if err != nil {
 		return nil, fmt.Errorf("failed to query direction stats: %w", err)
 	}

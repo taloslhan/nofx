@@ -44,4 +44,7 @@ func TestTraderStoreEnsureColumnsAddsFallbackAIModelID(t *testing.T) {
 	if !db.Migrator().HasColumn(&Trader{}, "FallbackAIModelID") {
 		t.Fatal("fallback_ai_model_id column was not added")
 	}
+	if !db.Migrator().HasColumn(&Trader{}, "StatsResetTime") {
+		t.Fatal("stats_reset_time column was not added")
+	}
 }

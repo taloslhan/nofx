@@ -85,7 +85,7 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 
 	// Calculate average holding time
 	var positions []TraderPosition
-	s.db.Where("trader_id = ? AND status = ? AND exit_time > 0", traderID, "CLOSED").Find(&positions)
+	s.closedPositionQuery(traderID).Where("exit_time > 0").Find(&positions)
 	if len(positions) > 0 {
 		var totalMins float64
 		for _, pos := range positions {
@@ -98,7 +98,7 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 
 	// Recent 20 trades
 	var recent []TraderPosition
-	s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").
+	s.closedPositionQuery(traderID).
 		Order("exit_time DESC").Limit(20).Find(&recent)
 	for _, pos := range recent {
 		summary.RecentPnL += pos.RealizedPnL
@@ -119,7 +119,7 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 // calculateStreaks calculates win/loss streaks
 func (s *PositionStore) calculateStreaks(traderID string, summary *HistorySummary) {
 	var positions []TraderPosition
-	err := s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").
+	err := s.closedPositionQuery(traderID).
 		Order("exit_time DESC").
 		Find(&positions).Error
 	if err != nil || len(positions) == 0 {

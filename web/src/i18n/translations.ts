@@ -945,6 +945,8 @@ export const translations = {
       noHistoryDesc: 'Closed positions will appear here after trading.',
       showingPositions: 'Showing {count} of {total} positions',
       totalPnL: 'Total P&L',
+      grossRealizedPnL: 'Gross Realized P&L',
+      grossRealizedPnLDesc: 'Closed trades before fees',
       // Stats
       totalTrades: 'Total Trades',
       winLoss: 'Win: {win} / Loss: {loss}',
@@ -2236,6 +2238,8 @@ export const translations = {
       noHistoryDesc: '平仓后的仓位记录将显示在此处',
       showingPositions: '显示 {count} / {total} 条记录',
       totalPnL: '总盈亏',
+      grossRealizedPnL: '毛已实现盈亏',
+      grossRealizedPnLDesc: '已平仓，未扣手续费',
       // Stats
       totalTrades: '总交易次数',
       winLoss: '盈利: {win} / 亏损: {loss}',
@@ -3334,6 +3338,8 @@ export const translations = {
       noHistoryDesc: 'Posisi yang ditutup akan muncul di sini setelah trading.',
       showingPositions: 'Menampilkan {count} dari {total} posisi',
       totalPnL: 'Total L/R',
+      grossRealizedPnL: 'L/R Realisasi Kotor',
+      grossRealizedPnLDesc: 'Posisi tertutup sebelum biaya',
       totalTrades: 'Total Trading',
       winLoss: 'Menang: {win} / Kalah: {loss}',
       winRate: 'Win Rate',

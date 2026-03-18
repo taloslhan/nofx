@@ -448,6 +448,9 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
     return avgWin / avgLoss
   }, [stats])
 
+  const grossRealizedPnL = stats?.gross_realized_pnl ?? stats?.total_pnl ?? 0
+  const netRealizedPnL = stats?.net_pnl ?? grossRealizedPnL - (stats?.total_fee ?? 0)
+
   if (loading) {
     return (
       <div
@@ -540,10 +543,10 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
           />
           <StatCard
             icon="💰"
-            title={t('positionHistory.totalPnL', language)}
-            value={((stats.total_pnl || 0) >= 0 ? '+' : '') + formatNumber(stats.total_pnl || 0)}
-            color={(stats.total_pnl || 0) >= 0 ? '#0ECB81' : '#F6465D'}
-            subtitle={`${t('positionHistory.fee', language)}: -${formatNumber(stats.total_fee || 0)}`}
+            title={t('positionHistory.grossRealizedPnL', language)}
+            value={(grossRealizedPnL >= 0 ? '+' : '') + formatNumber(grossRealizedPnL)}
+            color={grossRealizedPnL >= 0 ? '#0ECB81' : '#F6465D'}
+            subtitle={t('positionHistory.grossRealizedPnLDesc', language)}
             metricKey="total_return"
             language={language}
           />
@@ -607,9 +610,9 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
           <StatCard
             icon="💵"
             title={t('positionHistory.netPnL', language)}
-            value={((stats.total_pnl || 0) - (stats.total_fee || 0) >= 0 ? '+' : '') + formatNumber((stats.total_pnl || 0) - (stats.total_fee || 0))}
-            color={(stats.total_pnl || 0) - (stats.total_fee || 0) >= 0 ? '#0ECB81' : '#F6465D'}
-            subtitle={t('positionHistory.netPnLDesc', language)}
+            value={(netRealizedPnL >= 0 ? '+' : '') + formatNumber(netRealizedPnL)}
+            color={netRealizedPnL >= 0 ? '#0ECB81' : '#F6465D'}
+            subtitle={`${t('positionHistory.netPnLDesc', language)} · ${t('positionHistory.fee', language)}: -${formatNumber(stats.total_fee || 0)}`}
             language={language}
           />
         </div>

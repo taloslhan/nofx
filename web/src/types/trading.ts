@@ -184,6 +184,8 @@ export interface TraderStats {
   profit_factor: number
   sharpe_ratio: number
   total_pnl: number
+  gross_realized_pnl: number
+  net_pnl: number
   total_fee: number
   avg_win: number
   avg_loss: number

@@ -188,6 +188,14 @@ CRITICAL: The "id" field (e.g. "abc123_deepseek") is what you must use for ai_mo
 model_id values: "openai","deepseek","qwen","kimi","grok","gemini","claude"
 Defaults when custom fields empty: openai→api.openai.com/v1, deepseek→api.deepseek.com, qwen→dashscope.aliyuncs.com/compatible-mode/v1, kimi→api.moonshot.ai/v1, grok→api.x.ai/v1, gemini→generativelanguage.googleapis.com/v1beta/openai, claude→api.anthropic.com/v1`,
 				s.handleUpdateModelConfigs)
+			s.routeWithSchema(protected, "POST", "/models/test", "Test AI model connection",
+				`Body: {"provider":"<provider name>","api_key":"<string>","custom_api_url":"<string, optional>","custom_model_name":"<string, optional>"}
+Returns: {"success":<bool>,"latency_ms":<number>,"model":"<resolved model>","message":"<provider reply>","error":"<failure reason>"}`,
+				s.handleTestModelConnection)
+			s.routeWithSchema(protected, "POST", "/models/:id/test-saved", "Test saved AI model connection",
+				`:id = EXACT id from GET /api/models
+Returns: {"success":<bool>,"latency_ms":<number>,"model":"<resolved model>","message":"<provider reply>","error":"<failure reason>"}`,
+				s.handleTestSavedModelConnection)
 
 			// Exchange configuration
 			s.routeWithSchema(protected, "GET", "/exchanges", "List exchange accounts",

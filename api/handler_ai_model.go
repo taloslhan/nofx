@@ -2,16 +2,20 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"nofx/config"
 	"nofx/crypto"
 	"nofx/logger"
+	"nofx/mcp"
 	"nofx/security"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type ModelConfig struct {
@@ -40,6 +44,74 @@ type UpdateModelConfigRequest struct {
 		CustomAPIURL    string `json:"custom_api_url"`
 		CustomModelName string `json:"custom_model_name"`
 	} `json:"models"`
+}
+
+type TestModelRequest struct {
+	Provider        string `json:"provider"`
+	APIKey          string `json:"api_key"`
+	CustomAPIURL    string `json:"custom_api_url"`
+	CustomModelName string `json:"custom_model_name"`
+}
+
+type TestModelResponse struct {
+	Success   bool   `json:"success"`
+	LatencyMs int64  `json:"latency_ms"`
+	Model     string `json:"model,omitempty"`
+	Message   string `json:"message,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+func (s *Server) decodeModelRequest(c *gin.Context, userID string, target interface{}) bool {
+	cfg := config.Get()
+
+	bodyBytes, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+		return false
+	}
+
+	if !cfg.TransportEncryption {
+		if err := json.Unmarshal(bodyBytes, target); err != nil {
+			logger.Infof("❌ Failed to parse plain model request: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+			return false
+		}
+		logger.Infof("📝 Received plain text model request (UserID: %s)", userID)
+		return true
+	}
+
+	var encryptedPayload crypto.EncryptedPayload
+	if err := json.Unmarshal(bodyBytes, &encryptedPayload); err != nil {
+		logger.Infof("❌ Failed to parse encrypted model payload: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format, encrypted transmission required"})
+		return false
+	}
+
+	if encryptedPayload.WrappedKey == "" {
+		logger.Infof("❌ Detected unencrypted model request (UserID: %s)", userID)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "This endpoint only supports encrypted transmission, please use encrypted client",
+			"code":    "ENCRYPTION_REQUIRED",
+			"message": "Encrypted transmission is required for security reasons",
+		})
+		return false
+	}
+
+	decrypted, err := s.cryptoHandler.cryptoService.DecryptSensitiveData(&encryptedPayload)
+	if err != nil {
+		logger.Infof("❌ Failed to decrypt model request (UserID: %s): %v", userID, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decrypt data"})
+		return false
+	}
+
+	if err := json.Unmarshal([]byte(decrypted), target); err != nil {
+		logger.Infof("❌ Failed to parse decrypted model request: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse decrypted data"})
+		return false
+	}
+
+	logger.Infof("🔓 Decrypted model request data (UserID: %s)", userID)
+	return true
 }
 
 // handleGetModelConfigs Get AI model configurations
@@ -91,61 +163,10 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 // handleUpdateModelConfigs Update AI model configurations (supports both encrypted and plain text based on config)
 func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	userID := c.GetString("user_id")
-	cfg := config.Get()
-
-	// Read raw request body
-	bodyBytes, err := c.GetRawData()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
-		return
-	}
 
 	var req UpdateModelConfigRequest
-
-	// Check if transport encryption is enabled
-	if !cfg.TransportEncryption {
-		// Transport encryption disabled, accept plain JSON
-		if err := json.Unmarshal(bodyBytes, &req); err != nil {
-			logger.Infof("❌ Failed to parse plain JSON request: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
-			return
-		}
-		logger.Infof("📝 Received plain text model config (UserID: %s)", userID)
-	} else {
-		// Transport encryption enabled, require encrypted payload
-		var encryptedPayload crypto.EncryptedPayload
-		if err := json.Unmarshal(bodyBytes, &encryptedPayload); err != nil {
-			logger.Infof("❌ Failed to parse encrypted payload: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format, encrypted transmission required"})
-			return
-		}
-
-		// Verify encrypted data
-		if encryptedPayload.WrappedKey == "" {
-			logger.Infof("❌ Detected unencrypted request (UserID: %s)", userID)
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error":   "This endpoint only supports encrypted transmission, please use encrypted client",
-				"code":    "ENCRYPTION_REQUIRED",
-				"message": "Encrypted transmission is required for security reasons",
-			})
-			return
-		}
-
-		// Decrypt data
-		decrypted, err := s.cryptoHandler.cryptoService.DecryptSensitiveData(&encryptedPayload)
-		if err != nil {
-			logger.Infof("❌ Failed to decrypt model config (UserID: %s): %v", userID, err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to decrypt data"})
-			return
-		}
-
-		// Parse decrypted data
-		if err := json.Unmarshal([]byte(decrypted), &req); err != nil {
-			logger.Infof("❌ Failed to parse decrypted data: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to parse decrypted data"})
-			return
-		}
-		logger.Infof("🔓 Decrypted model config data (UserID: %s)", userID)
+	if !s.decodeModelRequest(c, userID, &req) {
+		return
 	}
 
 	// Update each model's configuration and track traders that need reload
@@ -180,7 +201,7 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	}
 
 	// Reload all traders for this user to make new config take effect immediately
-	err = s.traderManager.LoadUserTradersFromStore(s.store, userID)
+	err := s.traderManager.LoadUserTradersFromStore(s.store, userID)
 	if err != nil {
 		logger.Infof("⚠️ Failed to reload user traders into memory: %v", err)
 		// Don't return error here since model config was successfully updated to database
@@ -188,6 +209,138 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 
 	logger.Infof("✓ AI model config updated: %+v", req.Models)
 	c.JSON(http.StatusOK, gin.H{"message": "Model configuration updated"})
+}
+
+func validateModelConnectionInput(provider, apiKey, customAPIURL string) error {
+	if provider == "" {
+		return fmt.Errorf("provider is required")
+	}
+	if apiKey == "" {
+		return fmt.Errorf("api_key is required")
+	}
+	if customAPIURL != "" {
+		cleanURL := strings.TrimSuffix(customAPIURL, "#")
+		if err := security.ValidateURL(cleanURL); err != nil {
+			return fmt.Errorf("Invalid custom_api_url: %s", err.Error())
+		}
+	}
+	return nil
+}
+
+func runModelConnectionTest(userID, provider, apiKey, customAPIURL, customModelName string) TestModelResponse {
+	client := mcp.NewAIClientByProvider(
+		provider,
+		mcp.WithTimeout(30*time.Second),
+		mcp.WithMaxRetries(1),
+		mcp.WithMaxTokens(50),
+	)
+
+	resp := TestModelResponse{}
+	if client == nil {
+		resp.Error = fmt.Sprintf("unsupported provider: %s", provider)
+		return resp
+	}
+
+	client.SetAPIKey(apiKey, customAPIURL, customModelName)
+
+	if embedder, ok := client.(mcp.ClientEmbedder); ok {
+		resp.Model = embedder.BaseClient().Model
+	}
+
+	start := time.Now()
+	result, err := client.CallWithMessages("Reply with exactly one word: OK", "test")
+	resp.LatencyMs = time.Since(start).Milliseconds()
+
+	if err != nil {
+		resp.Error = err.Error()
+		logger.Infof("❌ Model connection test failed (user=%s provider=%s model=%s): %v", userID, provider, resp.Model, err)
+		return resp
+	}
+
+	resp.Success = true
+	resp.Message = strings.TrimSpace(result)
+	if resp.Message == "" {
+		resp.Message = "OK"
+	}
+
+	logger.Infof("✅ Model connection test passed (user=%s provider=%s model=%s latency=%dms)", userID, provider, resp.Model, resp.LatencyMs)
+	return resp
+}
+
+func (s *Server) handleTestModelConnection(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req TestModelRequest
+	if !s.decodeModelRequest(c, userID, &req) {
+		return
+	}
+
+	req.Provider = strings.TrimSpace(req.Provider)
+	req.APIKey = strings.TrimSpace(req.APIKey)
+	req.CustomAPIURL = strings.TrimSpace(req.CustomAPIURL)
+	req.CustomModelName = strings.TrimSpace(req.CustomModelName)
+
+	if err := validateModelConnectionInput(req.Provider, req.APIKey, req.CustomAPIURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp := runModelConnectionTest(
+		userID,
+		req.Provider,
+		req.APIKey,
+		req.CustomAPIURL,
+		req.CustomModelName,
+	)
+	if resp.Error != "" && strings.HasPrefix(resp.Error, "unsupported provider:") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": resp.Error})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+func (s *Server) handleTestSavedModelConnection(c *gin.Context) {
+	userID := c.GetString("user_id")
+	modelID := strings.TrimSpace(c.Param("id"))
+	if modelID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model id is required"})
+		return
+	}
+
+	model, err := s.store.AIModel().Get(userID, modelID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Model not found"})
+			return
+		}
+		SafeInternalError(c, "Get AI model config", err)
+		return
+	}
+
+	provider := strings.TrimSpace(model.Provider)
+	apiKey := strings.TrimSpace(model.APIKey.String())
+	customAPIURL := strings.TrimSpace(model.CustomAPIURL)
+	customModelName := strings.TrimSpace(model.CustomModelName)
+
+	if err := validateModelConnectionInput(provider, apiKey, customAPIURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp := runModelConnectionTest(
+		userID,
+		provider,
+		apiKey,
+		customAPIURL,
+		customModelName,
+	)
+	if resp.Error != "" && strings.HasPrefix(resp.Error, "unsupported provider:") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": resp.Error})
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // handleGetSupportedModels Get list of AI models supported by the system

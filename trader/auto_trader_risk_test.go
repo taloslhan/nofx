@@ -4,6 +4,7 @@ import (
 	"nofx/store"
 	"sync"
 	"testing"
+	"time"
 )
 
 // ============================================================================
@@ -15,8 +16,10 @@ func newTestAutoTrader(strategyConfig *store.StrategyConfig) *AutoTrader {
 		config: AutoTraderConfig{
 			StrategyConfig: strategyConfig,
 		},
-		peakPnLCache:      make(map[string]float64),
-		peakPnLCacheMutex: sync.RWMutex{},
+		peakPnLCache:       make(map[string]float64),
+		peakPnLCacheMutex:  sync.RWMutex{},
+		lastCloseTime:      make(map[string]time.Time),
+		lastCloseTimeMutex: sync.RWMutex{},
 	}
 	return at
 }
@@ -78,6 +81,18 @@ func TestGetPeakPnLCache_ReturnsCopy(t *testing.T) {
 	original := at.GetPeakPnLCache()
 	if original["BTCUSDT_long"] != 10.0 {
 		t.Error("GetPeakPnLCache should return a copy, not a reference")
+	}
+}
+
+func TestSetAndGetLastCloseTime(t *testing.T) {
+	at := newTestAutoTrader(nil)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	at.SetLastCloseTime("BTCUSDT", now)
+
+	got := at.GetLastCloseTime("BTCUSDT")
+	if !got.Equal(now) {
+		t.Fatalf("expected %v, got %v", now, got)
 	}
 }
 
@@ -237,5 +252,32 @@ func TestEnforceMaxPositions_NilConfig(t *testing.T) {
 	at := newTestAutoTrader(nil)
 	if err := at.enforceMaxPositions(100); err != nil {
 		t.Errorf("nil config should pass, got %v", err)
+	}
+}
+
+func TestShouldBlockActiveClose_MinHoldSatisfied(t *testing.T) {
+	blocked := shouldBlockActiveClose(2*time.Hour, 120, -5, -20)
+	if blocked {
+		t.Error("expected close to be allowed once min hold is satisfied")
+	}
+}
+
+func TestShouldBlockActiveClose_NormalLossStillBlocked(t *testing.T) {
+	blocked := shouldBlockActiveClose(30*time.Minute, 120, -8, -20)
+	if !blocked {
+		t.Error("expected close to be blocked before emergency loss threshold")
+	}
+}
+
+func TestShouldBlockActiveClose_EmergencyLossAllowsBypass(t *testing.T) {
+	blocked := shouldBlockActiveClose(30*time.Minute, 120, -25, -20)
+	if blocked {
+		t.Error("expected close to be allowed after emergency loss threshold")
+	}
+}
+
+func TestNormalizeEmergencyCloseLossPct_DefaultFallback(t *testing.T) {
+	if got := normalizeEmergencyCloseLossPct(0); got != -20 {
+		t.Fatalf("expected fallback threshold -20, got %v", got)
 	}
 }

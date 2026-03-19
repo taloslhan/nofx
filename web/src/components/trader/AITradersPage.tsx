@@ -362,35 +362,19 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     }
   }
 
-  const handleDeleteConfig = async <T extends { id: string }>(config: {
-    id: string
-    type: 'model' | 'exchange'
-    checkInUse: (id: string) => boolean
-    getUsingTraders: (id: string) => any[]
-    cannotDeleteKey: string
-    confirmDeleteKey: string
-    allItems: T[] | undefined
-    clearFields: (item: T) => T
-    buildRequest: (items: T[]) => any
-    updateApi: (request: any) => Promise<void>
-    refreshApi: () => Promise<T[]>
-    setItems: (items: T[]) => void
-    closeModal: () => void
-    errorKey: string
-  }) => {
-    if (config.checkInUse(config.id)) {
-      const usingTraders = config.getUsingTraders(config.id)
-      const traderNames = usingTraders.map((tr) => tr.trader_name).join(', ')
+  const handleDeleteModelConfig = async (modelId: string) => {
+    if (isModelUsedByAnyTrader(modelId)) {
+      const traderNames = getTradersUsingModel(modelId)
+        .map((tr) => tr.trader_name)
+        .join(', ')
       toast.error(
-        `${t(config.cannotDeleteKey, language)} · ${t('tradersUsing', language)}: ${traderNames} · ${t('pleaseDeleteTradersFirst', language)}`
+        `${t('cannotDeleteModelInUse', language)} · ${t('tradersUsing', language)}: ${traderNames} · ${t('pleaseDeleteTradersFirst', language)}`
       )
       return
     }
 
-    {
-      const ok = await confirmToast(t(config.confirmDeleteKey, language))
-      if (!ok) return
-    }
+    const ok = await confirmToast(t('confirmDeleteModel', language))
+    if (!ok) return
 
     try {
       const updatedItems =
@@ -402,112 +386,50 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
       await config.updateApi(request)
       toast.success(t('aiTradersToast.configUpdated', language))
 
-      const refreshedItems = await config.refreshApi()
-      config.setItems(refreshedItems)
-
-      config.closeModal()
+      const refreshedModels = await api.getModelConfigs()
+      setAllModels([...refreshedModels])
+      setShowModelModal(false)
+      setEditingModel(null)
     } catch (error) {
-      console.error(`Failed to delete ${config.type} config:`, error)
-      toast.error(t(config.errorKey, language))
+      console.error('Failed to delete model config:', error)
+      toast.error(t('deleteConfigFailed', language))
     }
-  }
-
-  const handleDeleteModelConfig = async (modelId: string) => {
-    await handleDeleteConfig({
-      id: modelId,
-      type: 'model',
-      checkInUse: isModelUsedByAnyTrader,
-      getUsingTraders: getTradersUsingModel,
-      cannotDeleteKey: 'cannotDeleteModelInUse',
-      confirmDeleteKey: 'confirmDeleteModel',
-      allItems: allModels,
-      clearFields: (m) => ({
-        ...m,
-        apiKey: '',
-        customApiUrl: '',
-        customModelName: '',
-        enabled: false,
-      }),
-      buildRequest: (models) => ({
-        models: Object.fromEntries(
-          models.map((model) => [
-            model.provider,
-            {
-              enabled: model.enabled,
-              api_key: model.apiKey || '',
-              custom_api_url: model.customApiUrl || '',
-              custom_model_name: model.customModelName || '',
-            },
-          ])
-        ),
-      }),
-      updateApi: api.updateModelConfigs,
-      refreshApi: api.getModelConfigs,
-      setItems: (items) => {
-        setAllModels([...items])
-      },
-      closeModal: () => {
-        setShowModelModal(false)
-        setEditingModel(null)
-      },
-      errorKey: 'deleteConfigFailed',
-    })
   }
 
   const handleSaveModelConfig = async (
     modelId: string,
     apiKey: string,
     customApiUrl?: string,
-    customModelName?: string
+    customModelName?: string,
+    displayName?: string
   ) => {
     try {
+      const editingModelConfig = editingModel
+        ? allModels?.find((m) => m.id === editingModel)
+        : null
       const existingModel = allModels?.find((m) => m.id === modelId)
-      let updatedModels
+      const modelTemplate = supportedModels?.find((m) => m.id === modelId)
+      const targetModel = editingModelConfig || existingModel || modelTemplate
 
-      const modelToUpdate =
-        existingModel || supportedModels?.find((m) => m.id === modelId)
-      if (!modelToUpdate) {
+      if (!targetModel) {
         toast.error(t('modelNotExist', language))
         return
       }
 
-      if (existingModel) {
-        updatedModels =
-          allModels?.map((m) =>
-            m.id === modelId
-              ? {
-                  ...m,
-                  apiKey,
-                  customApiUrl: customApiUrl || '',
-                  customModelName: customModelName || '',
-                  enabled: true,
-                }
-              : m
-          ) || []
-      } else {
-        const newModel = {
-          ...modelToUpdate,
-          apiKey,
-          customApiUrl: customApiUrl || '',
-          customModelName: customModelName || '',
-          enabled: true,
-        }
-        updatedModels = [...(allModels || []), newModel]
-      }
+      const requestName = displayName?.trim() || ''
 
-      const request = {
-        models: Object.fromEntries(
-          updatedModels.map((model) => [
-            model.provider,
-            {
-              enabled: model.enabled,
-              api_key: model.apiKey || '',
-              custom_api_url: model.customApiUrl || '',
-              custom_model_name: model.customModelName || '',
+      if (editingModelConfig) {
+        const request = {
+          models: {
+            [targetModel.id]: {
+              name: requestName,
+              enabled: true,
+              api_key: apiKey,
+              custom_api_url: customApiUrl || '',
+              custom_model_name: customModelName || '',
             },
-          ])
-        ),
-      }
+          },
+        }
 
       await api.updateModelConfigs(request)
       toast.success(t('aiTradersToast.modelConfigUpdated', language))

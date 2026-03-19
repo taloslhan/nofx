@@ -7,10 +7,15 @@ interface ModelCardProps {
   model: AIModel
   selected: boolean
   onClick: () => void
-  configured?: boolean
+  configuredCount?: number
 }
 
-export function ModelCard({ model, selected, onClick, configured }: ModelCardProps) {
+export function ModelCard({
+  model,
+  selected,
+  onClick,
+  configuredCount = 0,
+}: ModelCardProps) {
   return (
     <button
       type="button"
@@ -23,8 +28,13 @@ export function ModelCard({ model, selected, onClick, configured }: ModelCardPro
     >
       <div className="relative">
         <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-black border border-white/10">
-          {getModelIcon(model.provider || model.id, { width: 32, height: 32 }) || (
-            <span className="text-lg font-bold" style={{ color: '#A78BFA' }}>{model.name[0]}</span>
+          {getModelIcon(model.provider || model.id, {
+            width: 32,
+            height: 32,
+          }) || (
+            <span className="text-lg font-bold" style={{ color: '#A78BFA' }}>
+              {model.name[0]}
+            </span>
           )}
         </div>
         {selected && (
@@ -35,12 +45,12 @@ export function ModelCard({ model, selected, onClick, configured }: ModelCardPro
             <Check className="w-3 h-3 text-black" />
           </div>
         )}
-        {configured && !selected && (
+        {configuredCount > 0 && !selected && (
           <div
-            className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center"
-            style={{ background: '#F0B90B' }}
+            className="absolute -top-1 -right-1 min-w-4 h-4 px-1 rounded-full flex items-center justify-center text-[9px] font-bold"
+            style={{ background: '#F0B90B', color: '#000' }}
           >
-            <Check className="w-2.5 h-2.5 text-black" />
+            {configuredCount}
           </div>
         )}
       </div>

@@ -417,6 +417,8 @@ export const translations = {
       'Please delete or reconfigure these traders first',
     selectModel: 'Select AI Model',
     pleaseSelectModel: 'Please select a model',
+    channelName: 'Channel Name',
+    channelNamePlaceholder: 'e.g. DeepSeek Main Account',
     customBaseURL: 'Base URL (Optional)',
     customBaseURLPlaceholder:
       'Custom API base URL, e.g.: https://api.openai.com/v1',
@@ -959,7 +961,7 @@ export const translations = {
       showingPositions: 'Showing {count} of {total} positions',
       totalPnL: 'Total P&L',
       grossRealizedPnL: 'Gross Realized P&L',
-      grossRealizedPnLDesc: 'Closed trades before fees',
+      grossRealizedPnLDesc: 'Closed trades only, before fees',
       // Stats
       totalTrades: 'Total Trades',
       winLoss: 'Win: {win} / Loss: {loss}',
@@ -974,8 +976,10 @@ export const translations = {
       avgWin: 'Avg Win',
       avgLoss: 'Avg Loss',
       netPnL: 'Net P&L',
-      netPnLDesc: 'After Fees',
+      netPnLDesc: 'Closed trades only, after fees',
       fee: 'Fee',
+      totalPnLRelationHint:
+        'Top Total P&L uses account equity, so it can differ from closed-trade P&L.',
       // Direction Stats
       trades: 'Trades',
       avgPnL: 'Avg P&L',
@@ -1171,6 +1175,8 @@ export const translations = {
       copyAddress: 'Copy address',
       noAddressConfigured: 'No address configured',
       action: 'Action',
+      totalPnLBreakdown:
+        'Closed gross {gross} · Fee {fee} · Unrealized {unrealized}',
       entry: 'Entry',
       mark: 'Mark',
       qty: 'Qty',
@@ -1760,6 +1766,8 @@ export const translations = {
     pleaseDeleteTradersFirst: '请先删除或重新配置这些交易员',
     selectModel: '选择AI模型',
     pleaseSelectModel: '请选择模型',
+    channelName: '渠道名称',
+    channelNamePlaceholder: '例如：DeepSeek 主账号',
     customBaseURL: 'Base URL (可选)',
     customBaseURLPlaceholder: '自定义API基础URL，如: https://api.openai.com/v1',
     leaveBlankForDefault: '留空则使用默认API地址',
@@ -2271,7 +2279,7 @@ export const translations = {
       showingPositions: '显示 {count} / {total} 条记录',
       totalPnL: '总盈亏',
       grossRealizedPnL: '毛已实现盈亏',
-      grossRealizedPnLDesc: '已平仓，未扣手续费',
+      grossRealizedPnLDesc: '仅统计已平仓交易，未扣手续费',
       // Stats
       totalTrades: '总交易次数',
       winLoss: '盈利: {win} / 亏损: {loss}',
@@ -2286,8 +2294,10 @@ export const translations = {
       avgWin: '平均盈利',
       avgLoss: '平均亏损',
       netPnL: '净盈亏',
-      netPnLDesc: '扣除手续费后',
+      netPnLDesc: '仅统计已平仓交易，扣除手续费后',
       fee: '手续费',
+      totalPnLRelationHint:
+        '顶部总盈亏基于账户净值，因此可能与已平仓盈亏不同。',
       // Direction Stats
       trades: '交易次数',
       avgPnL: '平均盈亏',
@@ -2479,6 +2489,8 @@ export const translations = {
       copyAddress: '复制地址',
       noAddressConfigured: '未配置地址',
       action: '操作',
+      totalPnLBreakdown:
+        '已平仓毛盈亏 {gross} · 手续费 {fee} · 未实现 {unrealized}',
       entry: '入场价',
       mark: '标记价',
       qty: '数量',
@@ -3074,6 +3086,8 @@ export const translations = {
       'Silakan hapus atau konfigurasi ulang trader ini terlebih dahulu',
     selectModel: 'Pilih Model AI',
     pleaseSelectModel: 'Silakan pilih model',
+    channelName: 'Nama Kanal',
+    channelNamePlaceholder: 'mis. Akun Utama DeepSeek',
     customBaseURL: 'Base URL (Opsional)',
     customBaseURLPlaceholder:
       'URL base API kustom, misal: https://api.openai.com/v1',
@@ -3529,7 +3543,7 @@ export const translations = {
       showingPositions: 'Menampilkan {count} dari {total} posisi',
       totalPnL: 'Total L/R',
       grossRealizedPnL: 'L/R Realisasi Kotor',
-      grossRealizedPnLDesc: 'Posisi tertutup sebelum biaya',
+      grossRealizedPnLDesc: 'Hanya trade tertutup, sebelum biaya',
       totalTrades: 'Total Trading',
       winLoss: 'Menang: {win} / Kalah: {loss}',
       winRate: 'Win Rate',
@@ -3543,8 +3557,10 @@ export const translations = {
       avgWin: 'Rata-rata Menang',
       avgLoss: 'Rata-rata Kalah',
       netPnL: 'L/R Bersih',
-      netPnLDesc: 'Setelah Biaya',
+      netPnLDesc: 'Hanya trade tertutup, setelah biaya',
       fee: 'Biaya',
+      totalPnLRelationHint:
+        'Total L/R di panel atas berbasis ekuitas akun, jadi bisa berbeda dari L/R trade tertutup.',
       trades: 'Trading',
       avgPnL: 'Rata-rata L/R',
       symbolPerformance: 'Performa Simbol',
@@ -3735,6 +3751,8 @@ export const translations = {
       copyAddress: 'Salin alamat',
       noAddressConfigured: 'Alamat belum dikonfigurasi',
       action: 'Aksi',
+      totalPnLBreakdown:
+        'L/R kotor tertutup {gross} · Biaya {fee} · Belum terealisasi {unrealized}',
       entry: 'Entry',
       mark: 'Mark',
       qty: 'Qty',

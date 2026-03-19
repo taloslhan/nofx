@@ -122,41 +122,57 @@ export function SettingsPage() {
     modelId: string,
     apiKey: string,
     customApiUrl?: string,
-    customModelName?: string
+    customModelName?: string,
+    displayName?: string
   ) => {
     try {
+      const editingModelConfig = editingModel
+        ? configuredModels.find((m) => m.id === editingModel)
+        : null
       const existingModel = configuredModels.find((m) => m.id === modelId)
       const modelTemplate = supportedModels.find((m) => m.id === modelId)
-      const modelToUpdate = existingModel || modelTemplate
-      if (!modelToUpdate) {
+      const targetModel = editingModelConfig || existingModel || modelTemplate
+
+      if (!targetModel) {
         toast.error('Model not found')
         return
       }
 
-      let updatedModels: AIModel[]
-      if (existingModel) {
-        updatedModels = configuredModels.map((m) =>
-          m.id === modelId
-            ? {
-                ...m,
-                apiKey,
-                customApiUrl: customApiUrl || '',
-                customModelName: customModelName || '',
-                enabled: true,
-              }
-            : m
-        )
-      } else {
-        updatedModels = [
-          ...configuredModels,
-          {
-            ...modelToUpdate,
-            apiKey,
-            customApiUrl: customApiUrl || '',
-            customModelName: customModelName || '',
-            enabled: true,
+      const requestName = displayName?.trim() || ''
+
+      if (editingModelConfig) {
+        const request = {
+          models: {
+            [targetModel.id]: {
+              name: requestName,
+              enabled: true,
+              api_key: apiKey,
+              custom_api_url: customApiUrl || '',
+              custom_model_name: customModelName || '',
+            },
           },
-        ]
+        }
+
+        await toast.promise(api.updateModelConfigs(request), {
+          loading: 'Saving model config...',
+          success: 'Model config saved',
+          error: 'Failed to save model config',
+        })
+      } else {
+        const request = {
+          provider: targetModel.provider,
+          name: requestName,
+          enabled: true,
+          api_key: apiKey,
+          custom_api_url: customApiUrl || '',
+          custom_model_name: customModelName || '',
+        }
+
+        await toast.promise(api.createAIModel(request), {
+          loading: 'Creating model config...',
+          success: 'Model config saved',
+          error: 'Failed to save model config',
+        })
       }
 
       const request = {
@@ -185,36 +201,15 @@ export function SettingsPage() {
 
   const handleDeleteModel = async (modelId: string) => {
     try {
-      const updatedModels = configuredModels.map((m) =>
-        m.id === modelId
-          ? {
-              ...m,
-              apiKey: '',
-              customApiUrl: '',
-              customModelName: '',
-              enabled: false,
-            }
-          : m
-      )
-      const request = {
-        models: Object.fromEntries(
-          updatedModels.map((m) => [
-            m.provider,
-            {
-              enabled: m.enabled,
-              api_key: m.apiKey || '',
-              custom_api_url: m.customApiUrl || '',
-              custom_model_name: m.customModelName || '',
-            },
-          ])
-        ),
-      }
-      await api.updateModelConfigs(request)
+      await toast.promise(api.deleteAIModel(modelId), {
+        loading: 'Deleting model config...',
+        success: 'Model config removed',
+        error: 'Failed to remove model config',
+      })
       const refreshed = await api.getModelConfigs()
       setConfiguredModels(refreshed)
       setShowModelModal(false)
       setEditingModel(null)
-      toast.success('Model config removed')
     } catch {
       toast.error('Failed to remove model config')
     }

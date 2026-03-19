@@ -1,5 +1,6 @@
 import type {
   AIModel,
+  CreateAIModelRequest,
   Exchange,
   UpdateModelConfigRequest,
   TestModelConnectionRequest,
@@ -71,6 +72,43 @@ export const configApi = {
     // Send encrypted data
     const result = await httpClient.put(`${API_BASE}/models`, encryptedPayload)
     if (!result.success) throw new Error('Failed to update model configs')
+  },
+
+  async createAIModel(request: CreateAIModelRequest): Promise<{ id: string }> {
+    const config = await CryptoService.fetchCryptoConfig()
+
+    if (!config.transport_encryption) {
+      const result = await httpClient.post<{ id: string }>(
+        `${API_BASE}/models`,
+        request
+      )
+      if (!result.success) throw new Error('Failed to create AI model')
+      return result.data!
+    }
+
+    const publicKey = await CryptoService.fetchPublicKey()
+    await CryptoService.initialize(publicKey)
+
+    const userId = localStorage.getItem('user_id') || ''
+    const sessionId = sessionStorage.getItem('session_id') || ''
+
+    const encryptedPayload = await CryptoService.encryptSensitiveData(
+      JSON.stringify(request),
+      userId,
+      sessionId
+    )
+
+    const result = await httpClient.post<{ id: string }>(
+      `${API_BASE}/models`,
+      encryptedPayload
+    )
+    if (!result.success) throw new Error('Failed to create AI model')
+    return result.data!
+  },
+
+  async deleteAIModel(modelId: string): Promise<void> {
+    const result = await httpClient.delete(`${API_BASE}/models/${modelId}`)
+    if (!result.success) throw new Error('Failed to delete AI model')
   },
 
   async testModelConnection(

@@ -25,7 +25,8 @@ interface ModelConfigModalProps {
     modelId: string,
     apiKey: string,
     baseUrl?: string,
-    modelName?: string
+    modelName?: string,
+    displayName?: string
   ) => void
   onTestConnection: (
     provider: string,
@@ -53,6 +54,7 @@ export function ModelConfigModal({
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [modelName, setModelName] = useState('')
+  const [displayName, setDisplayName] = useState('')
 
   // Always prefer allModels (supportedModels) for provider/id lookup;
   // fall back to configuredModels for edit mode details (apiKey etc.)
@@ -65,8 +67,18 @@ export function ModelConfigModal({
       setApiKey(selectedModel.apiKey || '')
       setBaseUrl(selectedModel.customApiUrl || '')
       setModelName(selectedModel.customModelName || '')
+      setDisplayName(selectedModel.name || '')
     }
   }, [editingModelId, selectedModel])
+
+  useEffect(() => {
+    if (!editingModelId) {
+      setDisplayName('')
+      setApiKey('')
+      setBaseUrl('')
+      setModelName('')
+    }
+  }, [editingModelId, selectedModelId])
 
   const handleSelectModel = (modelId: string) => {
     setSelectedModelId(modelId)
@@ -89,12 +101,19 @@ export function ModelConfigModal({
       selectedModelId,
       apiKey.trim(),
       baseUrl.trim() || undefined,
-      modelName.trim() || undefined
+      modelName.trim() || undefined,
+      displayName.trim() || undefined
     )
   }
 
   const availableModels = allModels || []
-  const configuredIds = new Set(configuredModels?.map((m) => m.id) || [])
+  const configuredCountByProvider = (configuredModels || []).reduce<
+    Record<string, number>
+  >((acc, model) => {
+    const provider = model.provider || model.id
+    acc[provider] = (acc[provider] || 0) + 1
+    return acc
+  }, {})
   const stepLabels = [
     t('modelConfig.selectModel', language),
     t('modelConfig.configureApi', language),
@@ -178,7 +197,7 @@ export function ModelConfigModal({
           {currentStep === 0 && !editingModelId && (
             <ModelSelectionStep
               availableModels={availableModels}
-              configuredIds={configuredIds}
+              configuredCountByProvider={configuredCountByProvider}
               selectedModelId={selectedModelId}
               onSelectModel={handleSelectModel}
               language={language}
@@ -192,9 +211,11 @@ export function ModelConfigModal({
               selectedModel.id === 'claw402') && (
               <Claw402ConfigForm
                 provider={selectedModel.provider}
+                displayName={displayName}
                 apiKey={apiKey}
                 modelName={modelName}
                 editingModelId={editingModelId}
+                onDisplayNameChange={setDisplayName}
                 onApiKeyChange={setApiKey}
                 onModelNameChange={setModelName}
                 onTestConnection={onTestConnection}
@@ -211,10 +232,12 @@ export function ModelConfigModal({
             selectedModel.id !== 'claw402' && (
               <StandardProviderConfigForm
                 selectedModel={selectedModel}
+                displayName={displayName}
                 apiKey={apiKey}
                 baseUrl={baseUrl}
                 modelName={modelName}
                 editingModelId={editingModelId}
+                onDisplayNameChange={setDisplayName}
                 onApiKeyChange={setApiKey}
                 onBaseUrlChange={setBaseUrl}
                 onModelNameChange={setModelName}
@@ -300,13 +323,13 @@ function useConnectionTest({
 
 function ModelSelectionStep({
   availableModels,
-  configuredIds,
+  configuredCountByProvider,
   selectedModelId,
   onSelectModel,
   language,
 }: {
   availableModels: AIModel[]
-  configuredIds: Set<string>
+  configuredCountByProvider: Record<string, number>
   selectedModelId: string
   onSelectModel: (modelId: string) => void
   language: Language
@@ -368,13 +391,17 @@ function ModelSelectionStep({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {configuredIds.has(
-                availableModels.find((m) => m.provider === 'claw402')?.id || ''
-              ) && (
+              {(configuredCountByProvider.claw402 || 0) > 0 && (
                 <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: '#00E096' }}
-                />
+                  className="text-[11px] px-2 py-0.5 rounded-full"
+                  style={{
+                    background: 'rgba(0, 224, 150, 0.1)',
+                    color: '#00E096',
+                    border: '1px solid rgba(0, 224, 150, 0.2)',
+                  }}
+                >
+                  {`${configuredCountByProvider.claw402} ${t('configured', language).toLowerCase()}`}
+                </div>
               )}
               <div
                 className="px-3 py-1.5 rounded-full text-xs font-bold"
@@ -422,9 +449,11 @@ function ModelSelectionStep({
 
 function Claw402ConfigForm({
   provider,
+  displayName,
   apiKey,
   modelName,
   editingModelId,
+  onDisplayNameChange,
   onApiKeyChange,
   onModelNameChange,
   onTestConnection,
@@ -433,9 +462,11 @@ function Claw402ConfigForm({
   language,
 }: {
   provider: string
+  displayName: string
   apiKey: string
   modelName: string
   editingModelId: string | null
+  onDisplayNameChange: (value: string) => void
   onApiKeyChange: (value: string) => void
   onModelNameChange: (value: string) => void
   onTestConnection: (
@@ -654,6 +685,41 @@ function Claw402ConfigForm({
             )
           })}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#EAECEF' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#2563EB' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 7h16M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z"
+            />
+          </svg>
+          {t('channelName', language)}
+        </label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => onDisplayNameChange(e.target.value)}
+          placeholder={t('channelNamePlaceholder', language)}
+          className="w-full px-4 py-3 rounded-xl"
+          style={{
+            background: '#0B0E11',
+            border: '1px solid #2B3139',
+            color: '#EAECEF',
+          }}
+        />
       </div>
 
       {/* Step 2: Wallet Setup */}
@@ -1001,10 +1067,12 @@ function Claw402ConfigForm({
 
 function StandardProviderConfigForm({
   selectedModel,
+  displayName,
   apiKey,
   baseUrl,
   modelName,
   editingModelId,
+  onDisplayNameChange,
   onApiKeyChange,
   onBaseUrlChange,
   onModelNameChange,
@@ -1014,10 +1082,12 @@ function StandardProviderConfigForm({
   language,
 }: {
   selectedModel: AIModel
+  displayName: string
   apiKey: string
   baseUrl: string
   modelName: string
   editingModelId: string | null
+  onDisplayNameChange: (value: string) => void
   onApiKeyChange: (value: string) => void
   onBaseUrlChange: (value: string) => void
   onModelNameChange: (value: string) => void
@@ -1103,6 +1173,41 @@ function StandardProviderConfigForm({
           </div>
         </div>
       )}
+
+      <div className="space-y-2">
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#EAECEF' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#A78BFA' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 7h16M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z"
+            />
+          </svg>
+          {t('channelName', language)}
+        </label>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => onDisplayNameChange(e.target.value)}
+          placeholder={t('channelNamePlaceholder', language)}
+          className="w-full px-4 py-3 rounded-xl"
+          style={{
+            background: '#0B0E11',
+            border: '1px solid #2B3139',
+            color: '#EAECEF',
+          }}
+        />
+      </div>
 
       {/* API Key / Wallet Private Key */}
       <div className="space-y-2">

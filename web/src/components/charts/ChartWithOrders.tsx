@@ -11,6 +11,7 @@ import {
 import { useLanguage } from '../../contexts/LanguageContext'
 import { httpClient } from '../../lib/httpClient'
 import { t } from '../../i18n/translations'
+import { formatChartTimestamp, utcToChartTimestamp } from '../../utils/format'
 
 // Order marker interface
 interface OrderMarker {
@@ -125,7 +126,7 @@ export function ChartWithOrders({
       // Convert backend data format to lightweight-charts format
       // Backend returns market.Kline format: {OpenTime, Open, High, Low, Close, Volume, ...}
       return data.map((candle: any) => ({
-        time: Math.floor(candle.openTime / 1000) as UTCTimestamp, // ms to seconds
+        time: utcToChartTimestamp(candle.openTime),
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -227,8 +228,7 @@ export function ChartWithOrders({
       },
       localization: {
         timeFormatter: (time: number) => {
-          const date = new Date(time * 1000)
-          return date.toLocaleString('zh-CN', {
+          return formatChartTimestamp(time, 'zh-CN', {
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
@@ -363,8 +363,10 @@ export function ChartWithOrders({
           }> = []
 
           orders.forEach((order) => {
+            const chartOrderTime = utcToChartTimestamp(order.time * 1000) as number
+
             // Align order time to kline interval (floor)
-            const alignedTime = Math.floor(order.time / intervalSeconds) * intervalSeconds
+            const alignedTime = Math.floor(chartOrderTime / intervalSeconds) * intervalSeconds
 
             // Check if aligned time exists in kline data
             if (!klineTimeSet.has(alignedTime)) {
@@ -470,12 +472,16 @@ export function ChartWithOrders({
             }}
           >
             <div style={{ marginBottom: '6px', color: '#F0B90B', fontWeight: 'bold', fontSize: '11px' }}>
-              {new Date((tooltipData.time as number) * 1000).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatChartTimestamp(
+                tooltipData.time as number,
+                language === 'zh' ? 'zh-CN' : 'en-US',
+                {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '11px' }}>
               <span style={{ color: '#848E9C' }}>O:</span>

@@ -4,7 +4,6 @@ import {
   IChartApi,
   ISeriesApi,
   Time,
-  UTCTimestamp,
   CandlestickSeries,
   LineSeries,
   HistogramSeries,
@@ -19,6 +18,7 @@ import {
   calculateBollingerBands,
   type Kline,
 } from '../../utils/indicators'
+import { formatChartTimestamp, utcToChartTimestamp } from '../../utils/format'
 import { Settings, BarChart2 } from 'lucide-react'
 
 // Order marker interface
@@ -161,7 +161,7 @@ export function AdvancedChart({
 
       // Convert data format
       const rawData = result.data.map((candle: any) => ({
-        time: Math.floor(candle.openTime / 1000) as UTCTimestamp,
+        time: utcToChartTimestamp(candle.openTime),
         open: candle.open,
         high: candle.high,
         low: candle.low,
@@ -411,8 +411,7 @@ export function AdvancedChart({
       },
       localization: {
         timeFormatter: (time: number) => {
-          const date = new Date(time * 1000)
-          return date.toLocaleString('zh-CN', {
+          return formatChartTimestamp(time, 'zh-CN', {
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
@@ -626,8 +625,10 @@ export function AdvancedChart({
             const ordersByCandle = new Map<number, { buys: number; sells: number }>()
 
             orders.forEach(order => {
+              const chartOrderTime = utcToChartTimestamp(order.time * 1000) as number
+
               // Use binary search to find matching kline candle time
-              const candleTime = findCandleTime(order.time)
+              const candleTime = findCandleTime(chartOrderTime)
 
               if (candleTime === null) {
                 console.warn('[AdvancedChart] ⚠️ Skipping order outside kline range:',
@@ -1106,12 +1107,16 @@ export function AdvancedChart({
             }}
           >
             <div style={{ marginBottom: '6px', color: '#F0B90B', fontWeight: 'bold', fontSize: '11px' }}>
-              {new Date((tooltipData.time as number) * 1000).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatChartTimestamp(
+                tooltipData.time as number,
+                language === 'zh' ? 'zh-CN' : 'en-US',
+                {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '11px' }}>
               <span style={{ color: '#848E9C' }}>O:</span>

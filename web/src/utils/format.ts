@@ -1,3 +1,5 @@
+import type { UTCTimestamp } from 'lightweight-charts'
+
 /**
  * 数字格式化工具
  *
@@ -132,4 +134,43 @@ export function formatPercent(value: number | undefined | null, decimals = 2): s
   return value.toFixed(decimals)
 }
 
-export default { formatPrice, formatQuantity, formatPercent }
+/**
+ * 将 UTC 毫秒时间戳转换为 lightweight-charts 需要的本地时区秒级时间戳。
+ * 使用目标时间自身的时区偏移，避免夏令时场景下偏移错误。
+ *
+ * @param utcMs UTC 毫秒时间戳
+ * @returns 适用于 lightweight-charts 的秒级时间戳
+ */
+export function utcToChartTimestamp(utcMs: number): UTCTimestamp {
+  const date = new Date(utcMs)
+  const timezoneOffsetSeconds = date.getTimezoneOffset() * 60
+  return (Math.floor(utcMs / 1000) - timezoneOffsetSeconds) as UTCTimestamp
+}
+
+/**
+ * 格式化 lightweight-charts 内部使用的“本地化后”时间戳。
+ * 该时间戳已经叠加了本地时区偏移，因此这里强制按 UTC 解释，避免二次时区转换。
+ *
+ * @param chartTimestamp 图表秒级时间戳
+ * @param locale 语言区域
+ * @param options 日期格式选项
+ * @returns 格式化后的时间字符串
+ */
+export function formatChartTimestamp(
+  chartTimestamp: number,
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): string {
+  return new Date(chartTimestamp * 1000).toLocaleString(locale, {
+    ...options,
+    timeZone: 'UTC',
+  })
+}
+
+export default {
+  formatPrice,
+  formatQuantity,
+  formatPercent,
+  utcToChartTimestamp,
+  formatChartTimestamp,
+}

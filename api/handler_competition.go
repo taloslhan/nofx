@@ -177,7 +177,7 @@ func (s *Server) handleEquityHistory(c *gin.Context) {
 		}
 
 		history = append(history, EquityPoint{
-			Timestamp:        snap.Timestamp.Format("2006-01-02 15:04:05"),
+			Timestamp:        snap.Timestamp.Format(time.RFC3339),
 			TotalEquity:      snap.TotalEquity,
 			AvailableBalance: snap.Balance,
 			TotalPnL:         snap.UnrealizedPnL,

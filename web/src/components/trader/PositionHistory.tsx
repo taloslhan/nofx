@@ -26,6 +26,10 @@ function formatNumber(value: number, decimals: number = 2): string {
   return value.toFixed(decimals)
 }
 
+function getNetPnl(realizedPnl: number, fee: number): number {
+  return realizedPnl - fee
+}
+
 // Format duration from minutes
 function formatDuration(minutes: number): string {
   if (!minutes || minutes <= 0) return '-'
@@ -108,8 +112,15 @@ function StatCard({
 }
 
 // Symbol Stats Row
-function SymbolStatsRow({ stat }: { stat: SymbolStats }) {
-  const totalPnl = stat.total_pnl || 0
+function SymbolStatsRow({
+  stat,
+  language,
+}: {
+  stat: SymbolStats
+  language: Language
+}) {
+  const totalPnl =
+    stat.net_pnl ?? getNetPnl(stat.total_pnl || 0, stat.total_fee || 0)
   const winRate = stat.win_rate || 0
   const pnlColor = totalPnl >= 0 ? '#0ECB81' : '#F6465D'
   const winRateColor =
@@ -142,7 +153,7 @@ function SymbolStatsRow({ stat }: { stat: SymbolStats }) {
         </div>
         <div className="text-right min-w-[80px]">
           <div className="text-xs" style={{ color: '#848E9C' }}>
-            P&L
+            {t('positionHistory.netPnL', language)}
           </div>
           <div className="font-mono font-semibold" style={{ color: pnlColor }}>
             {totalPnl >= 0 ? '+' : ''}
@@ -164,7 +175,8 @@ function DirectionStatsCard({
 }) {
   const isLong = (stat.side || '').toLowerCase() === 'long'
   const iconColor = isLong ? '#0ECB81' : '#F6465D'
-  const totalPnl = stat.total_pnl || 0
+  const totalPnl =
+    stat.net_pnl ?? getNetPnl(stat.total_pnl || 0, stat.total_fee || 0)
   const winRate = stat.win_rate || 0
   const tradeCount = stat.trade_count || 0
   const avgPnl = stat.avg_pnl || 0
@@ -213,7 +225,7 @@ function DirectionStatsCard({
         </div>
         <div>
           <div className="text-xs mb-1" style={{ color: '#848E9C' }}>
-            {t('positionHistory.totalPnL', language)}
+            {t('positionHistory.netPnL', language)}
           </div>
           <div className="font-mono font-semibold" style={{ color: pnlColor }}>
             {totalPnl >= 0 ? '+' : ''}
@@ -242,7 +254,9 @@ function PositionRow({ position }: { position: HistoricalPosition }) {
   const side = position.side || ''
   const isLong = side.toUpperCase() === 'LONG'
   const realizedPnl = position.realized_pnl || 0
-  const isProfitable = realizedPnl >= 0
+  const fee = position.fee || 0
+  const netPnl = getNetPnl(realizedPnl, fee)
+  const isProfitable = netPnl >= 0
   const sideColor = isLong ? '#0ECB81' : '#F6465D'
   const pnlColor = isProfitable ? '#0ECB81' : '#F6465D'
 
@@ -261,17 +275,10 @@ function PositionRow({ position }: { position: HistoricalPosition }) {
   // Calculate PnL percentage based on entry price
   const entryPrice = position.entry_price || 0
   const exitPrice = position.exit_price || 0
-  let pnlPct = 0
-  if (entryPrice > 0) {
-    if (isLong) {
-      pnlPct = ((exitPrice - entryPrice) / entryPrice) * 100
-    } else {
-      pnlPct = ((entryPrice - exitPrice) / entryPrice) * 100
-    }
-  }
-
   // Use entry_quantity for display (original position size)
   const displayQty = position.entry_quantity || position.quantity || 0
+  const positionValue = entryPrice * displayQty
+  const pnlPct = positionValue > 0 ? (netPnl / positionValue) * 100 : 0
 
   return (
     <tr
@@ -329,14 +336,14 @@ function PositionRow({ position }: { position: HistoricalPosition }) {
         className="py-3 px-4 text-right font-mono"
         style={{ color: '#EAECEF' }}
       >
-        {formatNumber(entryPrice * displayQty)}
+        {formatNumber(positionValue)}
       </td>
 
       {/* P&L */}
       <td className="py-3 px-4 text-right">
         <div className="font-mono font-semibold" style={{ color: pnlColor }}>
           {isProfitable ? '+' : ''}
-          {formatNumber(realizedPnl)}
+          {formatNumber(netPnl)}
         </div>
         <div className="text-xs" style={{ color: pnlColor }}>
           {pnlPct >= 0 ? '+' : ''}
@@ -349,10 +356,7 @@ function PositionRow({ position }: { position: HistoricalPosition }) {
         className="py-3 px-4 text-right font-mono text-xs"
         style={{ color: '#848E9C' }}
       >
-        -
-        {(position.fee || 0) < 0.01 && (position.fee || 0) > 0
-          ? (position.fee || 0).toFixed(4)
-          : (position.fee || 0).toFixed(2)}
+        -{fee < 0.01 && fee > 0 ? fee.toFixed(4) : fee.toFixed(2)}
       </td>
 
       {/* Duration */}
@@ -446,7 +450,9 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
             new Date(b.exit_time || 0).getTime()
           break
         case 'pnl':
-          comparison = (a.realized_pnl || 0) - (b.realized_pnl || 0)
+          comparison =
+            getNetPnl(a.realized_pnl || 0, a.fee || 0) -
+            getNetPnl(b.realized_pnl || 0, b.fee || 0)
           break
         case 'pnl_pct': {
           const aPrice = a.entry_price || 1
@@ -480,6 +486,15 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
 
   // For backwards compatibility, keep filteredPositions as the paginated result
   const filteredPositions = paginatedPositions
+  const filteredNetPnL = useMemo(
+    () =>
+      filteredAndSortedPositions.reduce(
+        (sum, position) =>
+          sum + getNetPnl(position.realized_pnl || 0, position.fee || 0),
+        0
+      ),
+    [filteredAndSortedPositions]
+  )
 
   // Calculate profit/loss ratio (avg win / avg loss)
   const profitLossRatio = useMemo(() => {
@@ -741,7 +756,11 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
           </div>
           <div className="space-y-1">
             {symbolStats.slice(0, 10).map((stat) => (
-              <SymbolStatsRow key={stat.symbol} stat={stat} />
+              <SymbolStatsRow
+                key={stat.symbol}
+                stat={stat}
+                language={language}
+              />
             ))}
           </div>
         </div>
@@ -930,30 +949,14 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
             </span>
             {totalFilteredCount > 0 && (
               <span>
-                {t('positionHistory.totalPnL', language)}:{' '}
+                {t('positionHistory.netPnL', language)}:{' '}
                 <span
                   style={{
-                    color:
-                      filteredAndSortedPositions.reduce(
-                        (sum, p) => sum + (p.realized_pnl || 0),
-                        0
-                      ) >= 0
-                        ? '#0ECB81'
-                        : '#F6465D',
+                    color: filteredNetPnL >= 0 ? '#0ECB81' : '#F6465D',
                   }}
                 >
-                  {filteredAndSortedPositions.reduce(
-                    (sum, p) => sum + (p.realized_pnl || 0),
-                    0
-                  ) >= 0
-                    ? '+'
-                    : ''}
-                  {formatNumber(
-                    filteredAndSortedPositions.reduce(
-                      (sum, p) => sum + (p.realized_pnl || 0),
-                      0
-                    )
-                  )}
+                  {filteredNetPnL >= 0 ? '+' : ''}
+                  {formatNumber(filteredNetPnL)}
                 </span>
               </span>
             )}

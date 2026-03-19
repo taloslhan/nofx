@@ -203,6 +203,8 @@ export interface SymbolStats {
   win_trades: number
   win_rate: number
   total_pnl: number
+  total_fee: number
+  net_pnl: number
   avg_pnl: number
   avg_hold_mins: number
 }
@@ -213,6 +215,8 @@ export interface DirectionStats {
   trade_count: number
   win_rate: number
   total_pnl: number
+  total_fee: number
+  net_pnl: number
   avg_pnl: number
 }
 

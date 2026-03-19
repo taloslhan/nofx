@@ -39,11 +39,21 @@ type SafeModelConfig struct {
 
 type UpdateModelConfigRequest struct {
 	Models map[string]struct {
+		Name            string `json:"name"`
 		Enabled         bool   `json:"enabled"`
 		APIKey          string `json:"api_key"`
 		CustomAPIURL    string `json:"custom_api_url"`
 		CustomModelName string `json:"custom_model_name"`
 	} `json:"models"`
+}
+
+type CreateAIModelRequest struct {
+	Provider        string `json:"provider" binding:"required"`
+	Name            string `json:"name"`
+	Enabled         bool   `json:"enabled"`
+	APIKey          string `json:"api_key"`
+	CustomAPIURL    string `json:"custom_api_url"`
+	CustomModelName string `json:"custom_model_name"`
 }
 
 type TestModelRequest struct {
@@ -114,6 +124,25 @@ func (s *Server) decodeModelRequest(c *gin.Context, userID string, target interf
 	return true
 }
 
+var supportedAIProviderSet = map[string]struct{}{
+	"deepseek":      {},
+	"qwen":          {},
+	"openai":        {},
+	"claude":        {},
+	"gemini":        {},
+	"grok":          {},
+	"kimi":          {},
+	"minimax":       {},
+	"blockrun-base": {},
+	"blockrun-sol":  {},
+	"claw402":       {},
+}
+
+func isSupportedAIProvider(provider string) bool {
+	_, ok := supportedAIProviderSet[provider]
+	return ok
+}
+
 // handleGetModelConfigs Get AI model configurations
 func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -160,6 +189,100 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 	c.JSON(http.StatusOK, safeModels)
 }
 
+// handleCreateAIModel Create a new AI model instance
+func (s *Server) handleCreateAIModel(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req CreateAIModelRequest
+	if !s.decodeModelRequest(c, userID, &req) {
+		return
+	}
+
+	req.Provider = strings.TrimSpace(req.Provider)
+	req.Name = strings.TrimSpace(req.Name)
+	req.APIKey = strings.TrimSpace(req.APIKey)
+	req.CustomAPIURL = strings.TrimSpace(req.CustomAPIURL)
+	req.CustomModelName = strings.TrimSpace(req.CustomModelName)
+
+	if !isSupportedAIProvider(req.Provider) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid provider: %s", req.Provider)})
+		return
+	}
+
+	if req.CustomAPIURL != "" {
+		cleanURL := strings.TrimSuffix(req.CustomAPIURL, "#")
+		if err := security.ValidateURL(cleanURL); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid custom_api_url: %s", err.Error())})
+			return
+		}
+		req.CustomAPIURL = cleanURL
+	}
+
+	modelID, err := s.store.AIModel().CreateInstance(
+		userID,
+		req.Provider,
+		req.Name,
+		req.Enabled,
+		req.APIKey,
+		req.CustomAPIURL,
+		req.CustomModelName,
+	)
+	if err != nil {
+		logger.Infof("❌ Failed to create AI model: %v", err)
+		SafeInternalError(c, "Failed to create AI model", err)
+		return
+	}
+
+	logger.Infof("✓ Created AI model: provider=%s, name=%s, id=%s", req.Provider, req.Name, modelID)
+	c.JSON(http.StatusOK, gin.H{
+		"message": "AI model created",
+		"id":      modelID,
+	})
+}
+
+// handleDeleteAIModel Delete an AI model instance
+func (s *Server) handleDeleteAIModel(c *gin.Context) {
+	userID := c.GetString("user_id")
+	modelID := strings.TrimSpace(c.Param("id"))
+	if modelID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Model ID is required"})
+		return
+	}
+
+	traders, err := s.store.Trader().ListByAIModelID(userID, modelID)
+	if err != nil {
+		SafeInternalError(c, "Check AI model usage", err)
+		return
+	}
+	if len(traders) > 0 {
+		firstTrader := traders[0]
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":       "Cannot delete AI model that is in use by traders",
+			"trader_id":   firstTrader.ID,
+			"trader_name": firstTrader.Name,
+		})
+		return
+	}
+
+	if telegramConfig, err := s.store.TelegramConfig().Get(); err == nil && telegramConfig.ModelID == modelID {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Cannot delete AI model that is in use by Telegram",
+		})
+		return
+	}
+
+	if err := s.store.AIModel().Delete(userID, modelID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Model not found"})
+			return
+		}
+		SafeInternalError(c, "Delete AI model", err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "AI model deleted"})
+}
+
 // handleUpdateModelConfigs Update AI model configurations (supports both encrypted and plain text based on config)
 func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	userID := c.GetString("user_id")
@@ -169,9 +292,20 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 		return
 	}
 
+	existingModels, err := s.store.AIModel().List(userID)
+	if err != nil {
+		SafeInternalError(c, "List AI models", err)
+		return
+	}
+
 	// Update each model's configuration and track traders that need reload
 	tradersToReload := make(map[string]bool)
 	for modelID, modelData := range req.Models {
+		modelData.Name = strings.TrimSpace(modelData.Name)
+		modelData.APIKey = strings.TrimSpace(modelData.APIKey)
+		modelData.CustomAPIURL = strings.TrimSpace(modelData.CustomAPIURL)
+		modelData.CustomModelName = strings.TrimSpace(modelData.CustomModelName)
+
 		// SSRF protection: validate custom_api_url before storing
 		if modelData.CustomAPIURL != "" {
 			cleanURL := strings.TrimSuffix(modelData.CustomAPIURL, "#")
@@ -179,6 +313,7 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid custom_api_url for model %s: %s", modelID, err.Error())})
 				return
 			}
+			modelData.CustomAPIURL = cleanURL
 		}
 
 		// Find traders using this AI model BEFORE updating
@@ -186,8 +321,30 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 		for _, t := range traders {
 			tradersToReload[t.ID] = true
 		}
+		if len(traders) == 0 {
+			for _, model := range existingModels {
+				if model.ID == modelID {
+					break
+				}
+				if model.Provider == modelID {
+					legacyTraders, _ := s.store.Trader().ListByAIModelID(userID, model.ID)
+					for _, t := range legacyTraders {
+						tradersToReload[t.ID] = true
+					}
+					break
+				}
+			}
+		}
 
-		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName)
+		err := s.store.AIModel().Update(
+			userID,
+			modelID,
+			modelData.Name,
+			modelData.Enabled,
+			modelData.APIKey,
+			modelData.CustomAPIURL,
+			modelData.CustomModelName,
+		)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update model %s", modelID), err)
 			return
@@ -201,7 +358,7 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	}
 
 	// Reload all traders for this user to make new config take effect immediately
-	err := s.traderManager.LoadUserTradersFromStore(s.store, userID)
+	err = s.traderManager.LoadUserTradersFromStore(s.store, userID)
 	if err != nil {
 		logger.Infof("⚠️ Failed to reload user traders into memory: %v", err)
 		// Don't return error here since model config was successfully updated to database

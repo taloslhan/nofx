@@ -183,11 +183,18 @@ Body: {"show_in_competition":<bool>}`,
 				`Returns: [{"id":"<EXACT id — use this as ai_model_id when creating/updating a trader>","name":"<display name>","provider":"<short provider name — NOT a valid id>","enabled":<bool>}]
 CRITICAL: The "id" field (e.g. "abc123_deepseek") is what you must use for ai_model_id. The "provider" field ("deepseek") is NOT valid as an id.`,
 				s.handleGetModelConfigs)
+			s.routeWithSchema(protected, "POST", "/models", "Create a new AI model instance",
+				`Body: {"provider":"<provider name>","name":"<optional user label>","enabled":<bool>,"api_key":"<string>","custom_api_url":"<string, optional>","custom_model_name":"<string, optional>"}
+Creates a new model instance with a UUID id so the same provider can be configured multiple times.`,
+				s.handleCreateAIModel)
 			s.routeWithSchema(protected, "PUT", "/models", "Configure an AI model provider",
-				`Body: {"models":{"<model_id>":{"enabled":<bool>,"api_key":"<string>","custom_api_url":"<string, leave empty to use provider default>","custom_model_name":"<string, leave empty to use provider default>"}}}
-model_id values: "openai","deepseek","qwen","kimi","grok","gemini","claude"
+				`Body: {"models":{"<model_id_or_legacy_provider>":{"name":"<optional display name>","enabled":<bool>,"api_key":"<string>","custom_api_url":"<string, leave empty to use provider default>","custom_model_name":"<string, leave empty to use provider default>"}}}
+Prefer model_id values from GET /api/models. Legacy provider keys are still accepted for backward compatibility.
 Defaults when custom fields empty: openai→api.openai.com/v1, deepseek→api.deepseek.com, qwen→dashscope.aliyuncs.com/compatible-mode/v1, kimi→api.moonshot.ai/v1, grok→api.x.ai/v1, gemini→generativelanguage.googleapis.com/v1beta/openai, claude→api.anthropic.com/v1`,
 				s.handleUpdateModelConfigs)
+			s.routeWithSchema(protected, "DELETE", "/models/:id", "Delete an AI model instance",
+				`:id = EXACT id from GET /api/models. Fails if any trader is still using this model.`,
+				s.handleDeleteAIModel)
 			s.routeWithSchema(protected, "POST", "/models/test", "Test AI model connection",
 				`Body: {"provider":"<provider name>","api_key":"<string>","custom_api_url":"<string, optional>","custom_model_name":"<string, optional>"}
 Returns: {"success":<bool>,"latency_ms":<number>,"model":"<resolved model>","message":"<provider reply>","error":"<failure reason>"}`,

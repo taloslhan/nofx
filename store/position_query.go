@@ -57,7 +57,7 @@ func (s *PositionStore) GetPositionStats(traderID string) (map[string]interface{
 	var r result
 
 	err := s.closedPositionQuery(traderID).
-		Select("COUNT(*) as total, SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as wins, COALESCE(SUM(realized_pnl), 0) as total_pnl, COALESCE(SUM(fee), 0) as total_fee").
+		Select("COUNT(*) as total, SUM(CASE WHEN realized_pnl - fee > 0 THEN 1 ELSE 0 END) as wins, COALESCE(SUM(realized_pnl), 0) as total_pnl, COALESCE(SUM(fee), 0) as total_fee").
 		Scan(&r).Error
 	if err != nil {
 		return nil, err
@@ -102,17 +102,19 @@ func (s *PositionStore) GetFullStats(traderID string) (*TraderStats, error) {
 	var totalWin, totalLoss float64
 
 	for _, pos := range positions {
+		tradeNetPnL := netPnL(pos.RealizedPnL, pos.Fee)
+
 		stats.TotalTrades++
 		stats.TotalPnL += pos.RealizedPnL
 		stats.TotalFee += pos.Fee
-		pnls = append(pnls, pos.RealizedPnL)
+		pnls = append(pnls, tradeNetPnL)
 
-		if pos.RealizedPnL > 0 {
+		if tradeNetPnL > 0 {
 			stats.WinTrades++
-			totalWin += pos.RealizedPnL
-		} else if pos.RealizedPnL < 0 {
+			totalWin += tradeNetPnL
+		} else if tradeNetPnL < 0 {
 			stats.LossTrades++
-			totalLoss += -pos.RealizedPnL
+			totalLoss += -tradeNetPnL
 		}
 	}
 
@@ -254,6 +256,8 @@ type SymbolStats struct {
 	WinTrades   int     `json:"win_trades"`
 	WinRate     float64 `json:"win_rate"`
 	TotalPnL    float64 `json:"total_pnl"`
+	TotalFee    float64 `json:"total_fee"`
+	NetPnL      float64 `json:"net_pnl"`
 	AvgPnL      float64 `json:"avg_pnl"`
 	AvgHoldMins float64 `json:"avg_hold_mins"`
 }
@@ -276,9 +280,13 @@ func (s *PositionStore) GetSymbolStats(traderID string, limit int) ([]SymbolStat
 			symbolHoldMins[pos.Symbol] = []float64{}
 		}
 		s := symbolMap[pos.Symbol]
+		tradeNetPnL := netPnL(pos.RealizedPnL, pos.Fee)
+
 		s.TotalTrades++
 		s.TotalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		s.TotalFee += pos.Fee
+		s.NetPnL += tradeNetPnL
+		if tradeNetPnL > 0 {
 			s.WinTrades++
 		}
 
@@ -292,7 +300,7 @@ func (s *PositionStore) GetSymbolStats(traderID string, limit int) ([]SymbolStat
 	for symbol, s := range symbolMap {
 		if s.TotalTrades > 0 {
 			s.WinRate = float64(s.WinTrades) / float64(s.TotalTrades) * 100
-			s.AvgPnL = s.TotalPnL / float64(s.TotalTrades)
+			s.AvgPnL = s.NetPnL / float64(s.TotalTrades)
 		}
 		if len(symbolHoldMins[symbol]) > 0 {
 			var totalMins float64
@@ -307,7 +315,7 @@ func (s *PositionStore) GetSymbolStats(traderID string, limit int) ([]SymbolStat
 	// Sort by TotalPnL descending and limit
 	for i := 0; i < len(stats)-1; i++ {
 		for j := i + 1; j < len(stats); j++ {
-			if stats[j].TotalPnL > stats[i].TotalPnL {
+			if stats[j].NetPnL > stats[i].NetPnL {
 				stats[i], stats[j] = stats[j], stats[i]
 			}
 		}
@@ -348,6 +356,8 @@ func (s *PositionStore) GetHoldingTimeStats(traderID string) ([]HoldingTimeStats
 	}
 
 	for _, pos := range positions {
+		tradeNetPnL := netPnL(pos.RealizedPnL, pos.Fee)
+
 		if pos.ExitTime == 0 {
 			continue
 		}
@@ -367,8 +377,8 @@ func (s *PositionStore) GetHoldingTimeStats(traderID string) ([]HoldingTimeStats
 
 		r := rangeStats[rangeKey]
 		r.count++
-		r.totalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		r.totalPnL += tradeNetPnL
+		if tradeNetPnL > 0 {
 			r.wins++
 		}
 	}
@@ -395,6 +405,8 @@ type DirectionStats struct {
 	TradeCount int     `json:"trade_count"`
 	WinRate    float64 `json:"win_rate"`
 	TotalPnL   float64 `json:"total_pnl"`
+	TotalFee   float64 `json:"total_fee"`
+	NetPnL     float64 `json:"net_pnl"`
 	AvgPnL     float64 `json:"avg_pnl"`
 }
 
@@ -407,23 +419,28 @@ func (s *PositionStore) GetDirectionStats(traderID string) ([]DirectionStats, er
 	}
 
 	sideStats := make(map[string]*DirectionStats)
+	sideWins := make(map[string]int)
 	for _, pos := range positions {
 		if _, ok := sideStats[pos.Side]; !ok {
 			sideStats[pos.Side] = &DirectionStats{Side: pos.Side}
 		}
 		s := sideStats[pos.Side]
+		tradeNetPnL := netPnL(pos.RealizedPnL, pos.Fee)
+
 		s.TradeCount++
 		s.TotalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
-			s.WinRate++
+		s.TotalFee += pos.Fee
+		s.NetPnL += tradeNetPnL
+		if tradeNetPnL > 0 {
+			sideWins[pos.Side]++
 		}
 	}
 
 	var stats []DirectionStats
 	for _, s := range sideStats {
 		if s.TradeCount > 0 {
-			s.AvgPnL = s.TotalPnL / float64(s.TradeCount)
-			s.WinRate = s.WinRate / float64(s.TradeCount) * 100
+			s.AvgPnL = s.NetPnL / float64(s.TradeCount)
+			s.WinRate = float64(sideWins[s.Side]) / float64(s.TradeCount) * 100
 		}
 		stats = append(stats, *s)
 	}

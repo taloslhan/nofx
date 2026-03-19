@@ -44,20 +44,20 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 	}
 	summary.TotalTrades = fullStats.TotalTrades
 	summary.WinRate = fullStats.WinRate
-	summary.TotalPnL = fullStats.TotalPnL
+	summary.TotalPnL = fullStats.NetPnL
 	if fullStats.TotalTrades > 0 {
-		summary.AvgTradeReturn = fullStats.TotalPnL / float64(fullStats.TotalTrades)
+		summary.AvgTradeReturn = fullStats.NetPnL / float64(fullStats.TotalTrades)
 	}
 
 	symbolStats, _ := s.GetSymbolStats(traderID, 20)
 	if len(symbolStats) > 0 {
 		for i := 0; i < len(symbolStats) && i < 3; i++ {
-			if symbolStats[i].TotalPnL > 0 {
+			if symbolStats[i].NetPnL > 0 {
 				summary.BestSymbols = append(summary.BestSymbols, symbolStats[i])
 			}
 		}
 		for i := len(symbolStats) - 1; i >= 0 && len(summary.WorstSymbols) < 3; i-- {
-			if symbolStats[i].TotalPnL < 0 {
+			if symbolStats[i].NetPnL < 0 {
 				summary.WorstSymbols = append(summary.WorstSymbols, symbolStats[i])
 			}
 		}
@@ -67,10 +67,10 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 	for _, d := range dirStats {
 		if d.Side == "LONG" {
 			summary.LongWinRate = d.WinRate
-			summary.LongPnL = d.TotalPnL
+			summary.LongPnL = d.NetPnL
 		} else if d.Side == "SHORT" {
 			summary.ShortWinRate = d.WinRate
-			summary.ShortPnL = d.TotalPnL
+			summary.ShortPnL = d.NetPnL
 		}
 	}
 
@@ -101,8 +101,10 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 	s.closedPositionQuery(traderID).
 		Order("exit_time DESC").Limit(20).Find(&recent)
 	for _, pos := range recent {
-		summary.RecentPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		tradeNetPnL := netPnL(pos.RealizedPnL, pos.Fee)
+
+		summary.RecentPnL += tradeNetPnL
+		if tradeNetPnL > 0 {
 			summary.RecentWinRate++
 		}
 	}
@@ -131,7 +133,7 @@ func (s *PositionStore) calculateStreaks(traderID string, summary *HistorySummar
 	isFirst := true
 
 	for _, pos := range positions {
-		isWin := pos.RealizedPnL > 0
+		isWin := netPnL(pos.RealizedPnL, pos.Fee) > 0
 
 		if isFirst {
 			if isWin {

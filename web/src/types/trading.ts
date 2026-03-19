@@ -22,6 +22,9 @@ export interface AccountInfo {
   available_balance: number
   total_pnl: number
   total_pnl_pct: number
+  gross_realized_pnl?: number
+  net_realized_pnl?: number
+  total_fee?: number
   initial_balance: number
   daily_pnl: number
   position_count: number

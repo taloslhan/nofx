@@ -114,6 +114,26 @@ func (at *AutoTrader) GetAccountInfo() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to get balance: %w", err)
 	}
 
+	grossRealizedPnL := 0.0
+	netRealizedPnL := 0.0
+	totalFee := 0.0
+	if at.store != nil {
+		stats, err := at.store.Position().GetPositionStats(at.id)
+		if err != nil {
+			logger.Infof("⚠️ Failed to query realized P&L stats for trader %s: %v", at.id, err)
+		} else {
+			if gross, ok := stats["gross_realized_pnl"].(float64); ok {
+				grossRealizedPnL = gross
+			}
+			if net, ok := stats["net_pnl"].(float64); ok {
+				netRealizedPnL = net
+			}
+			if fee, ok := stats["total_fee"].(float64); ok {
+				totalFee = fee
+			}
+		}
+	}
+
 	// Get account fields
 	totalWalletBalance := 0.0
 	totalUnrealizedProfit := 0.0
@@ -192,10 +212,13 @@ func (at *AutoTrader) GetAccountInfo() (map[string]interface{}, error) {
 		"available_balance": availableBalance,      // Available balance
 
 		// P&L statistics
-		"total_pnl":       totalPnL,          // Total P&L = equity - initial
-		"total_pnl_pct":   totalPnLPct,       // Total P&L percentage
-		"initial_balance": at.initialBalance, // Initial balance
-		"daily_pnl":       at.dailyPnL,       // Daily P&L
+		"total_pnl":          totalPnL,          // Total P&L = equity - initial
+		"total_pnl_pct":      totalPnLPct,       // Total P&L percentage
+		"gross_realized_pnl": grossRealizedPnL,  // Gross realized P&L from closed positions
+		"net_realized_pnl":   netRealizedPnL,    // Net realized P&L after fees
+		"total_fee":          totalFee,          // Total trading fee from closed positions
+		"initial_balance":    at.initialBalance, // Initial balance
+		"daily_pnl":          at.dailyPnL,       // Daily P&L
 
 		// Position information
 		"position_count":  len(positions),  // Position count

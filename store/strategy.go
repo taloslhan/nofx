@@ -21,8 +21,8 @@ type Strategy struct {
 	Description   string    `gorm:"default:''" json:"description"`
 	IsActive      bool      `gorm:"column:is_active;default:false;index" json:"is_active"`
 	IsDefault     bool      `gorm:"column:is_default;default:false" json:"is_default"`
-	IsPublic      bool      `gorm:"column:is_public;default:false;index" json:"is_public"`       // whether visible in strategy market
-	ConfigVisible bool      `gorm:"column:config_visible;default:true" json:"config_visible"`    // whether config details are visible
+	IsPublic      bool      `gorm:"column:is_public;default:false;index" json:"is_public"`    // whether visible in strategy market
+	ConfigVisible bool      `gorm:"column:config_visible;default:true" json:"config_visible"` // whether config details are visible
 	Config        string    `gorm:"not null;default:'{}'" json:"config"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
@@ -139,7 +139,7 @@ type IndicatorConfig struct {
 	EnableMACD        bool `json:"enable_macd"`
 	EnableRSI         bool `json:"enable_rsi"`
 	EnableATR         bool `json:"enable_atr"`
-	EnableBOLL        bool `json:"enable_boll"`         // Bollinger Bands
+	EnableBOLL        bool `json:"enable_boll"` // Bollinger Bands
 	EnableVolume      bool `json:"enable_volume"`
 	EnableOI          bool `json:"enable_oi"`           // open interest
 	EnableFundingRate bool `json:"enable_funding_rate"` // funding rate
@@ -197,10 +197,10 @@ type KlineConfig struct {
 
 // ExternalDataSource external data source configuration
 type ExternalDataSource struct {
-	Name        string            `json:"name"`         // data source name
-	Type        string            `json:"type"`         // type: "api" | "webhook"
-	URL         string            `json:"url"`          // API URL
-	Method      string            `json:"method"`       // HTTP method
+	Name        string            `json:"name"`   // data source name
+	Type        string            `json:"type"`   // type: "api" | "webhook"
+	URL         string            `json:"url"`    // API URL
+	Method      string            `json:"method"` // HTTP method
 	Headers     map[string]string `json:"headers,omitempty"`
 	DataPath    string            `json:"data_path,omitempty"`    // JSON data path
 	RefreshSecs int               `json:"refresh_secs,omitempty"` // refresh interval (seconds)
@@ -232,6 +232,15 @@ type RiskControlConfig struct {
 	MinConfidence int `json:"min_confidence"`
 	// Min SL/TP distance from current price in percentage (CODE ENFORCED, default: 0.5%)
 	MinSLDistancePct float64 `json:"min_sl_distance_pct"`
+
+	// Min hold time in minutes before AI can actively close position (0 = disabled, CODE ENFORCED)
+	// Does not affect exchange-side SL/TP triggers
+	MinHoldMinutes int `json:"min_hold_minutes"`
+	// Emergency close loss threshold (margin-based PnL %, includes leverage, CODE ENFORCED)
+	// Example: -20 means when margin loss reaches 20%, MinHoldMinutes can be bypassed
+	EmergencyCloseLossPct float64 `json:"emergency_close_loss_pct"`
+	// Cooldown period in minutes after closing the same symbol (0 = disabled, CODE ENFORCED)
+	CooldownMinutes int `json:"cooldown_minutes"`
 
 	// Min hold time in minutes before drawdown monitoring kicks in (0 = immediate, CODE ENFORCED)
 	MinDrawdownCheckMinutes int `json:"min_drawdown_check_minutes"`
@@ -313,17 +322,20 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			PriceRankingLimit:    10,
 		},
 		RiskControl: RiskControlConfig{
-			MaxPositions:                    3,   // Max 3 coins simultaneously (CODE ENFORCED)
-			BTCETHMaxLeverage:               5,   // BTC/ETH exchange leverage (AI guided)
-			AltcoinMaxLeverage:              5,   // Altcoin exchange leverage (AI guided)
-			BTCETHMaxPositionValueRatio:     5.0, // BTC/ETH: max position = 5x equity (CODE ENFORCED)
-			AltcoinMaxPositionValueRatio:    1.0, // Altcoin: max position = 1x equity (CODE ENFORCED)
-			MaxMarginUsage:                  0.9, // Max 90% margin usage (CODE ENFORCED)
-			MinPositionSize:                 12,  // Min 12 USDT per position (CODE ENFORCED)
-			MinRiskRewardRatio:              3.0, // Min 3:1 profit/loss ratio (AI guided)
-			MinConfidence:                   75,  // Min 75% confidence (AI guided)
-			MinSLDistancePct:                0.5, // Min 0.5% distance from current price to SL/TP
-			MinDrawdownCheckMinutes:         30,  // Wait 30 minutes before checking drawdown (CODE ENFORCED)
+			MaxPositions:                 3,   // Max 3 coins simultaneously (CODE ENFORCED)
+			BTCETHMaxLeverage:            5,   // BTC/ETH exchange leverage (AI guided)
+			AltcoinMaxLeverage:           5,   // Altcoin exchange leverage (AI guided)
+			BTCETHMaxPositionValueRatio:  5.0, // BTC/ETH: max position = 5x equity (CODE ENFORCED)
+			AltcoinMaxPositionValueRatio: 1.0, // Altcoin: max position = 1x equity (CODE ENFORCED)
+			MaxMarginUsage:               0.9, // Max 90% margin usage (CODE ENFORCED)
+			MinPositionSize:              12,  // Min 12 USDT per position (CODE ENFORCED)
+			MinRiskRewardRatio:           3.0, // Min 3:1 profit/loss ratio (AI guided)
+			MinConfidence:                75,  // Min 75% confidence (AI guided)
+			MinSLDistancePct:             0.5, // Min 0.5% distance from current price to SL/TP
+			MinHoldMinutes:               120, // Hold at least 2 hours before AI-driven close
+			EmergencyCloseLossPct:        -20, // Allow early close when margin loss reaches 20%
+			CooldownMinutes:              180, // Wait 3 hours before reopening the same symbol
+			MinDrawdownCheckMinutes:      30,  // Wait 30 minutes before checking drawdown (CODE ENFORCED)
 		},
 	}
 
@@ -340,7 +352,15 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 如果你发现自己每个周期都在交易 → 标准太低；如果持仓不到30分钟就平仓 → 太冲动。`,
 			EntryStandards: `# 🎯 入场标准（严格）
 
-只在多个信号共振时入场。自由使用任何有效的分析方法，避免单一指标、信号矛盾、横盘震荡、或平仓后立即重新开仓等低质量行为。`,
+只在多个信号共振时入场。自由使用任何有效的分析方法，但必须遵守时间框架层级：
+- 4H：判断趋势方向，只做顺 4H 趋势的交易
+- 1H：确认入场时机，是主信号来源
+- 15m：仅用于优化入场点，不可单独决定方向
+
+禁止行为：
+- 禁止在 4H 趋势向下时开多（反之亦然）
+- 禁止仅凭 15m 信号开仓
+- 禁止单一指标、信号矛盾、横盘震荡、平仓后立即重开等低质量行为`,
 			DecisionProcess: `# 📋 决策流程
 
 1. 检查持仓 → 是否止盈/止损
@@ -360,7 +380,15 @@ Your task is to make trading decisions based on the provided market data. You ar
 If you find yourself trading every cycle → standards are too low; if closing positions in <30 minutes → too impulsive.`,
 			EntryStandards: `# 🎯 Entry Standards (Strict)
 
-Only enter positions when multiple signals resonate. Freely use any effective analysis methods, avoid low-quality behaviors such as single indicators, contradictory signals, sideways oscillation, or immediately restarting after closing positions.`,
+Only enter positions when multiple signals resonate. Freely use any effective analysis methods, but respect the timeframe hierarchy:
+- 4H: determine trend direction, only trade with the 4H trend
+- 1H: confirm entry timing, this is the primary signal source
+- 15m: refine execution only, never decide direction by itself
+
+Forbidden behaviors:
+- Do not open longs against a bearish 4H trend (and vice versa)
+- Do not open positions based only on 15m signals
+- Avoid low-quality behaviors such as single indicators, contradictory signals, sideways chop, or reopening immediately after closing`,
 			DecisionProcess: `# 📋 Decision Process
 
 1. Check positions → whether to take profit/stop loss

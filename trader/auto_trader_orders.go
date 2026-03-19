@@ -6,6 +6,7 @@ import (
 	"nofx/logger"
 	"nofx/market"
 	"nofx/store"
+	"strconv"
 	"time"
 )
 
@@ -28,9 +29,158 @@ func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actio
 	}
 }
 
+type closePositionSnapshot struct {
+	normalizedSymbol string
+	entryPrice       float64
+	quantity         float64
+	entryTimeMs      int64
+	currentPnLPct    float64
+}
+
+func extractUnixMillis(value interface{}) int64 {
+	switch v := value.(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case string:
+		ms, err := strconv.ParseInt(v, 10, 64)
+		if err == nil {
+			return ms
+		}
+	}
+	return 0
+}
+
+func (at *AutoTrader) loadClosePositionSnapshot(symbol string, side string) *closePositionSnapshot {
+	normalizedSymbol := market.Normalize(symbol)
+	snapshot := &closePositionSnapshot{
+		normalizedSymbol: normalizedSymbol,
+	}
+
+	dbSide := "LONG"
+	if side == "short" {
+		dbSide = "SHORT"
+	}
+
+	if at.store != nil {
+		if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, dbSide); err == nil && openPos != nil {
+			snapshot.quantity = openPos.Quantity
+			snapshot.entryPrice = openPos.EntryPrice
+			snapshot.entryTimeMs = openPos.EntryTime
+			logger.Infof("  📊 Using local position data: qty=%.8f, entry=%.2f", snapshot.quantity, snapshot.entryPrice)
+		}
+	}
+
+	positions, err := at.trader.GetPositions()
+	if err == nil {
+		for _, pos := range positions {
+			if pos["symbol"] != symbol || pos["side"] != side {
+				continue
+			}
+
+			if snapshot.entryPrice == 0 {
+				if ep, ok := pos["entryPrice"].(float64); ok {
+					snapshot.entryPrice = ep
+				}
+			}
+
+			if snapshot.quantity == 0 {
+				if amt, ok := pos["positionAmt"].(float64); ok {
+					snapshot.quantity = amt
+					if snapshot.quantity < 0 {
+						snapshot.quantity = -snapshot.quantity
+					}
+				}
+			}
+
+			if snapshot.entryTimeMs == 0 {
+				snapshot.entryTimeMs = extractUnixMillis(pos["createdTime"])
+			}
+
+			unrealizedPnl, _ := pos["unRealizedProfit"].(float64)
+			markPrice, _ := pos["markPrice"].(float64)
+			leverage := 10.0
+			if lev, ok := pos["leverage"].(float64); ok && lev > 0 {
+				leverage = lev
+			}
+			if snapshot.quantity > 0 && markPrice > 0 && leverage > 0 {
+				marginUsed := (snapshot.quantity * markPrice) / leverage
+				snapshot.currentPnLPct = calculatePnLPercentage(unrealizedPnl, marginUsed)
+			}
+			break
+		}
+	} else {
+		logger.Infof("  ⚠️ Failed to get exchange position snapshot: %v", err)
+	}
+
+	if snapshot.entryTimeMs == 0 {
+		posKey := symbol + "_" + side
+		if firstSeen, exists := at.positionFirstSeenTime[posKey]; exists {
+			snapshot.entryTimeMs = firstSeen
+		}
+	}
+
+	return snapshot
+}
+
+func (at *AutoTrader) enforceCooldown(normalizedSymbol string) error {
+	if at.config.StrategyConfig == nil {
+		return nil
+	}
+
+	cooldownMinutes := at.config.StrategyConfig.RiskControl.CooldownMinutes
+	if cooldownMinutes <= 0 {
+		return nil
+	}
+
+	lastCloseTime := at.GetLastCloseTime(normalizedSymbol)
+	if lastCloseTime.IsZero() {
+		return nil
+	}
+
+	elapsed := time.Since(lastCloseTime)
+	if elapsed < time.Duration(cooldownMinutes)*time.Minute {
+		return fmt.Errorf("❌ [RISK CONTROL] Cooldown period active for %s (%d/%d min since last close)",
+			normalizedSymbol, int(elapsed.Minutes()), cooldownMinutes)
+	}
+
+	return nil
+}
+
+func (at *AutoTrader) enforceMinHoldBeforeClose(symbol string, snapshot *closePositionSnapshot) error {
+	if at.config.StrategyConfig == nil || snapshot == nil {
+		return nil
+	}
+
+	minHoldMinutes := at.config.StrategyConfig.RiskControl.MinHoldMinutes
+	if minHoldMinutes <= 0 || snapshot.entryTimeMs <= 0 {
+		return nil
+	}
+
+	holdDuration := time.Since(time.UnixMilli(snapshot.entryTimeMs))
+	if !shouldBlockActiveClose(
+		holdDuration,
+		minHoldMinutes,
+		snapshot.currentPnLPct,
+		at.config.StrategyConfig.RiskControl.EmergencyCloseLossPct,
+	) {
+		return nil
+	}
+
+	emergencyLossPct := normalizeEmergencyCloseLossPct(at.config.StrategyConfig.RiskControl.EmergencyCloseLossPct)
+	return fmt.Errorf("❌ [RISK CONTROL] Min hold time not met for %s (%d/%d min), position PnL %.2f%% above emergency threshold %.2f%%",
+		symbol, int(holdDuration.Minutes()), minHoldMinutes, snapshot.currentPnLPct, emergencyLossPct)
+}
+
 // executeOpenLongWithRecord executes open long position and records detailed information
 func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
 	logger.Infof("  📈 Open long: %s", decision.Symbol)
+
+	normalizedSymbol := market.Normalize(decision.Symbol)
+	if err := at.enforceCooldown(normalizedSymbol); err != nil {
+		return err
+	}
 
 	// ⚠️ Get current positions for multiple checks
 	positions, err := at.trader.GetPositions()
@@ -163,6 +313,11 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 // executeOpenShortWithRecord executes open short position and records detailed information
 func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
 	logger.Infof("  📉 Open short: %s", decision.Symbol)
+
+	normalizedSymbol := market.Normalize(decision.Symbol)
+	if err := at.enforceCooldown(normalizedSymbol); err != nil {
+		return err
+	}
 
 	// ⚠️ Get current positions for multiple checks
 	positions, err := at.trader.GetPositions()
@@ -301,39 +456,9 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *kernel.Decision, acti
 	}
 	actionRecord.Price = marketData.CurrentPrice
 
-	// Normalize symbol for database lookup
-	normalizedSymbol := market.Normalize(decision.Symbol)
-
-	// Get entry price and quantity - prioritize local database for accurate quantity
-	var entryPrice float64
-	var quantity float64
-
-	// First try to get from local database (more accurate for quantity)
-	if at.store != nil {
-		if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "LONG"); err == nil && openPos != nil {
-			quantity = openPos.Quantity
-			entryPrice = openPos.EntryPrice
-			logger.Infof("  📊 Using local position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
-		}
-	}
-
-	// Fallback to exchange API if local data not found
-	if quantity == 0 {
-		positions, err := at.trader.GetPositions()
-		if err == nil {
-			for _, pos := range positions {
-				if pos["symbol"] == decision.Symbol && pos["side"] == "long" {
-					if ep, ok := pos["entryPrice"].(float64); ok {
-						entryPrice = ep
-					}
-					if amt, ok := pos["positionAmt"].(float64); ok && amt > 0 {
-						quantity = amt
-					}
-					break
-				}
-			}
-		}
-		logger.Infof("  📊 Using exchange position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
+	snapshot := at.loadClosePositionSnapshot(decision.Symbol, "long")
+	if err := at.enforceMinHoldBeforeClose(decision.Symbol, snapshot); err != nil {
+		return err
 	}
 
 	// Close position
@@ -348,7 +473,12 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *kernel.Decision, acti
 	}
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "close_long", quantity, marketData.CurrentPrice, 0, entryPrice)
+	at.recordAndConfirmOrder(order, decision.Symbol, "close_long", snapshot.quantity, marketData.CurrentPrice, 0, snapshot.entryPrice)
+	at.SetLastCloseTime(snapshot.normalizedSymbol, time.Now())
+	delete(at.positionFirstSeenTime, decision.Symbol+"_long")
+	delete(at.positionFirstSeenTime, snapshot.normalizedSymbol+"_long")
+	at.ClearPeakPnLCache(decision.Symbol, "long")
+	at.ClearPeakPnLCache(snapshot.normalizedSymbol, "long")
 
 	logger.Infof("  ✓ Position closed successfully")
 	return nil
@@ -365,39 +495,9 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	}
 	actionRecord.Price = marketData.CurrentPrice
 
-	// Normalize symbol for database lookup
-	normalizedSymbol := market.Normalize(decision.Symbol)
-
-	// Get entry price and quantity - prioritize local database for accurate quantity
-	var entryPrice float64
-	var quantity float64
-
-	// First try to get from local database (more accurate for quantity)
-	if at.store != nil {
-		if openPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, normalizedSymbol, "SHORT"); err == nil && openPos != nil {
-			quantity = openPos.Quantity
-			entryPrice = openPos.EntryPrice
-			logger.Infof("  📊 Using local position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
-		}
-	}
-
-	// Fallback to exchange API if local data not found
-	if quantity == 0 {
-		positions, err := at.trader.GetPositions()
-		if err == nil {
-			for _, pos := range positions {
-				if pos["symbol"] == decision.Symbol && pos["side"] == "short" {
-					if ep, ok := pos["entryPrice"].(float64); ok {
-						entryPrice = ep
-					}
-					if amt, ok := pos["positionAmt"].(float64); ok {
-						quantity = -amt // positionAmt is negative for short
-					}
-					break
-				}
-			}
-		}
-		logger.Infof("  📊 Using exchange position data: qty=%.8f, entry=%.2f", quantity, entryPrice)
+	snapshot := at.loadClosePositionSnapshot(decision.Symbol, "short")
+	if err := at.enforceMinHoldBeforeClose(decision.Symbol, snapshot); err != nil {
+		return err
 	}
 
 	// Close position
@@ -412,7 +512,12 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	}
 
 	// Record order to database and poll for confirmation
-	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", quantity, marketData.CurrentPrice, 0, entryPrice)
+	at.recordAndConfirmOrder(order, decision.Symbol, "close_short", snapshot.quantity, marketData.CurrentPrice, 0, snapshot.entryPrice)
+	at.SetLastCloseTime(snapshot.normalizedSymbol, time.Now())
+	delete(at.positionFirstSeenTime, decision.Symbol+"_short")
+	delete(at.positionFirstSeenTime, snapshot.normalizedSymbol+"_short")
+	at.ClearPeakPnLCache(decision.Symbol, "short")
+	at.ClearPeakPnLCache(snapshot.normalizedSymbol, "short")
 
 	logger.Infof("  ✓ Position closed successfully")
 	return nil

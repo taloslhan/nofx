@@ -95,10 +95,10 @@ type AutoTraderConfig struct {
 	CustomModelName string
 
 	// Fallback AI configuration (used when primary AI fails)
-	FallbackAIModel     string
-	FallbackAPIKey      string
-	FallbackAPIURL      string
-	FallbackModelName   string
+	FallbackAIModel   string
+	FallbackAPIKey    string
+	FallbackAPIURL    string
+	FallbackModelName string
 
 	// Scan configuration
 	ScanInterval time.Duration // Scan interval (recommended 3 minutes)
@@ -132,7 +132,7 @@ type AutoTrader struct {
 	config                AutoTraderConfig
 	trader                Trader // Use Trader interface (supports multiple platforms)
 	mcpClient             mcp.AIClient
-	fallbackMcpClient     mcp.AIClient  // Fallback AI client (nil if not configured)
+	fallbackMcpClient     mcp.AIClient           // Fallback AI client (nil if not configured)
 	store                 *store.Store           // Data storage (decision records, etc.)
 	strategyEngine        *kernel.StrategyEngine // Strategy engine (uses strategy configuration)
 	cycleNumber           int                    // Current cycle number
@@ -143,10 +143,12 @@ type AutoTrader struct {
 	lastResetTime         time.Time
 	stopUntil             time.Time
 	isRunning             bool
-	isRunningMutex        sync.RWMutex       // Mutex to protect isRunning flag
-	startTime             time.Time          // System start time
-	callCount             int                // AI call count
-	positionFirstSeenTime map[string]int64   // Position first seen time (symbol_side -> timestamp in milliseconds)
+	isRunningMutex        sync.RWMutex     // Mutex to protect isRunning flag
+	startTime             time.Time        // System start time
+	callCount             int              // AI call count
+	positionFirstSeenTime map[string]int64 // Position first seen time (symbol_side -> timestamp in milliseconds)
+	lastCloseTime         map[string]time.Time
+	lastCloseTimeMutex    sync.RWMutex
 	stopMonitorCh         chan struct{}      // Used to stop monitoring goroutine
 	monitorWg             sync.WaitGroup     // Used to wait for monitoring goroutine to finish
 	peakPnLCache          map[string]float64 // Peak profit cache (symbol -> peak P&L percentage)
@@ -387,6 +389,8 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		callCount:             0,
 		isRunning:             false,
 		positionFirstSeenTime: make(map[string]int64),
+		lastCloseTime:         make(map[string]time.Time),
+		lastCloseTimeMutex:    sync.RWMutex{},
 		stopMonitorCh:         make(chan struct{}),
 		monitorWg:             sync.WaitGroup{},
 		peakPnLCache:          make(map[string]float64),

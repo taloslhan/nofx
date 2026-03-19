@@ -109,6 +109,37 @@ func (at *AutoTrader) ClearPeakPnLCache(symbol, side string) {
 	delete(at.peakPnLCache, posKey)
 }
 
+// SetLastCloseTime records the latest successful close time for a symbol.
+func (at *AutoTrader) SetLastCloseTime(symbol string, closeTime time.Time) {
+	at.lastCloseTimeMutex.Lock()
+	defer at.lastCloseTimeMutex.Unlock()
+	at.lastCloseTime[symbol] = closeTime.UTC()
+}
+
+// GetLastCloseTime returns the latest successful close time for a symbol.
+func (at *AutoTrader) GetLastCloseTime(symbol string) time.Time {
+	at.lastCloseTimeMutex.RLock()
+	defer at.lastCloseTimeMutex.RUnlock()
+	return at.lastCloseTime[symbol]
+}
+
+func normalizeEmergencyCloseLossPct(threshold float64) float64 {
+	if threshold >= 0 {
+		return -20.0
+	}
+	return threshold
+}
+
+func shouldBlockActiveClose(holdDuration time.Duration, minHoldMinutes int, currentPnLPct float64, emergencyLossPct float64) bool {
+	if minHoldMinutes <= 0 {
+		return false
+	}
+	if holdDuration >= time.Duration(minHoldMinutes)*time.Minute {
+		return false
+	}
+	return currentPnLPct > normalizeEmergencyCloseLossPct(emergencyLossPct)
+}
+
 // ============================================================================
 // Risk Control Helpers
 // ============================================================================

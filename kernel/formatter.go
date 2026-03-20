@@ -289,7 +289,12 @@ func formatCandidateCoinsZH(ctx *Context) string {
 		// OI data (if available)
 		if ctx.OITopDataMap != nil {
 			if oiData, ok := ctx.OITopDataMap[coin.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("**持仓量变化**: OI排名 #%d | 变化 %+.2f%% (%+.2fM USDT) | 价格变化 %+.2f%%\n\n",
+				title := "**持仓量变化**"
+				if oiData.Duration != "" {
+					title = fmt.Sprintf("**持仓量变化(%s)**", oiData.Duration)
+				}
+				sb.WriteString(fmt.Sprintf("%s: OI排名 #%d | 变化 %+.2f%% (%+.2fM USDT) | 价格变化 %+.2f%%\n\n",
+					title,
 					oiData.Rank,
 					oiData.OIDeltaPercent,
 					oiData.OIDeltaValue/1_000_000,
@@ -355,7 +360,6 @@ func formatKlineDataZH(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 	return sb.String()
 }
-
 
 // getOIInterpretationZH returns OI change interpretation (Chinese)
 func getOIInterpretationZH(oiChange, priceChange string) string {
@@ -552,7 +556,12 @@ func formatCandidateCoinsEN(ctx *Context) string {
 
 		if ctx.OITopDataMap != nil {
 			if oiData, ok := ctx.OITopDataMap[coin.Symbol]; ok {
-				sb.WriteString(fmt.Sprintf("**OI Change**: Rank #%d | Change %+.2f%% (%+.2fM USDT) | Price Change %+.2f%%\n\n",
+				title := "**OI Change**"
+				if oiData.Duration != "" {
+					title = fmt.Sprintf("**OI Change (%s)**", oiData.Duration)
+				}
+				sb.WriteString(fmt.Sprintf("%s: Rank #%d | Change %+.2f%% (%+.2fM USDT) | Price Change %+.2f%%\n\n",
+					title,
 					oiData.Rank,
 					oiData.OIDeltaPercent,
 					oiData.OIDeltaValue/1_000_000,
@@ -620,7 +629,6 @@ func formatKlineDataEN(symbol string, tfData map[string]*market.TimeframeSeriesD
 
 	return sb.String()
 }
-
 
 // getOIInterpretationEN returns OI change interpretation (English)
 func getOIInterpretationEN(oiChange, priceChange string) string {

@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"nofx/logger"
 	"nofx/market"
+	"nofx/mcp"
 	"nofx/provider/hyperliquid"
 	"nofx/provider/nofxos"
 	"nofx/security"
-	"nofx/mcp"
 	"nofx/store"
 	"regexp"
 	"strings"
@@ -74,9 +74,10 @@ type CandidateCoin struct {
 // OITopData open interest growth top data (for AI decision reference)
 type OITopData struct {
 	Rank              int     // OI Top ranking
-	OIDeltaPercent    float64 // Open interest change percentage (1 hour)
+	OIDeltaPercent    float64 // Open interest change percentage (configured duration)
 	OIDeltaValue      float64 // Open interest change value
 	PriceDeltaPercent float64 // Price change percentage
+	Duration          string  // Ranking duration, e.g. 1h/4h/24h
 }
 
 // TradingStats trading statistics (for AI input)
@@ -272,7 +273,8 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	// Ensure OITopDataMap is initialized
 	if ctx.OITopDataMap == nil {
 		ctx.OITopDataMap = make(map[string]*OITopData)
-		oiPositions, err := engine.nofxosClient.GetOITopPositions()
+		duration := engine.getConfiguredOIRankingDuration()
+		oiPositions, err := engine.nofxosClient.GetOITopPositionsWithDuration(duration, 20)
 		if err == nil {
 			for _, pos := range oiPositions {
 				ctx.OITopDataMap[pos.Symbol] = &OITopData{
@@ -280,6 +282,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 					OIDeltaPercent:    pos.OIDeltaPercent,
 					OIDeltaValue:      pos.OIDeltaValue,
 					PriceDeltaPercent: pos.PriceDeltaPercent,
+					Duration:          duration,
 				}
 			}
 		}
@@ -668,7 +671,8 @@ func (e *StrategyEngine) getOITopCoins(limit int) ([]CandidateCoin, error) {
 		limit = 10
 	}
 
-	positions, err := e.nofxosClient.GetOITopPositions()
+	duration := e.getConfiguredOIRankingDuration()
+	positions, err := e.nofxosClient.GetOITopPositionsWithDuration(duration, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -692,7 +696,8 @@ func (e *StrategyEngine) getOILowCoins(limit int) ([]CandidateCoin, error) {
 		limit = 10
 	}
 
-	positions, err := e.nofxosClient.GetOILowPositions()
+	duration := e.getConfiguredOIRankingDuration()
+	positions, err := e.nofxosClient.GetOILowPositionsWithDuration(duration, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -709,6 +714,14 @@ func (e *StrategyEngine) getOILowCoins(limit int) ([]CandidateCoin, error) {
 		})
 	}
 	return candidates, nil
+}
+
+func (e *StrategyEngine) getConfiguredOIRankingDuration() string {
+	duration := e.config.Indicators.OIRankingDuration
+	if duration == "" {
+		return "1h"
+	}
+	return duration
 }
 
 // getHyperAllCoins returns all available Hyperliquid perpetual coins
@@ -945,10 +958,7 @@ func (e *StrategyEngine) FetchOIRankingData() *nofxos.OIRankingData {
 		return nil
 	}
 
-	duration := indicators.OIRankingDuration
-	if duration == "" {
-		duration = "1h"
-	}
+	duration := e.getConfiguredOIRankingDuration()
 
 	limit := indicators.OIRankingLimit
 	if limit <= 0 {

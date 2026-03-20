@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 )
 
@@ -12,7 +13,7 @@ type QuantData struct {
 	Symbol      string             `json:"symbol"`
 	Price       float64            `json:"price"`
 	Netflow     *NetflowData       `json:"netflow,omitempty"`
-	OI          map[string]*OIData `json:"oi,omitempty"` // keyed by exchange: "binance", "bybit"
+	OI          map[string]*OIData `json:"oi,omitempty"`           // keyed by exchange: "binance", "bybit"
 	PriceChange map[string]float64 `json:"price_change,omitempty"` // keyed by duration: "1h", "4h", etc.
 }
 
@@ -115,6 +116,33 @@ func FormatQuantDataForAI(symbol string, data *QuantData, lang Language) string 
 	return formatQuantDataEN(symbol, data)
 }
 
+func orderedOIDurations(delta map[string]*OIDeltaData) []string {
+	preferred := []string{"24h", "12h", "8h", "4h", "1h"}
+	seen := make(map[string]struct{}, len(delta))
+	durations := make([]string, 0, len(delta))
+
+	for _, duration := range preferred {
+		if delta[duration] != nil {
+			durations = append(durations, duration)
+			seen[duration] = struct{}{}
+		}
+	}
+
+	var remaining []string
+	for duration, value := range delta {
+		if value == nil {
+			continue
+		}
+		if _, exists := seen[duration]; exists {
+			continue
+		}
+		remaining = append(remaining, duration)
+	}
+	sort.Strings(remaining)
+
+	return append(durations, remaining...)
+}
+
 func formatQuantDataZH(symbol string, data *QuantData) string {
 	var sb strings.Builder
 
@@ -141,9 +169,10 @@ func formatQuantDataZH(symbol string, data *QuantData) string {
 					sb.WriteString(fmt.Sprintf("- 多头: %.2f, 空头: %.2f\n", oiData.NetLong, oiData.NetShort))
 				}
 				if oiData.Delta != nil {
-					if delta, ok := oiData.Delta["1h"]; ok && delta != nil {
-						sb.WriteString(fmt.Sprintf("- 1h变化: %s (%.2f%%)\n",
-							formatValue(delta.OIDeltaValue), delta.OIDeltaPercent))
+					for _, duration := range orderedOIDurations(oiData.Delta) {
+						delta := oiData.Delta[duration]
+						sb.WriteString(fmt.Sprintf("- %s变化: %s (%.2f%%)\n",
+							duration, formatValue(delta.OIDeltaValue), delta.OIDeltaPercent))
 					}
 				}
 				sb.WriteString("\n")
@@ -191,9 +220,10 @@ func formatQuantDataEN(symbol string, data *QuantData) string {
 					sb.WriteString(fmt.Sprintf("- Net Long: %.2f, Net Short: %.2f\n", oiData.NetLong, oiData.NetShort))
 				}
 				if oiData.Delta != nil {
-					if delta, ok := oiData.Delta["1h"]; ok && delta != nil {
-						sb.WriteString(fmt.Sprintf("- 1h Change: %s (%.2f%%)\n",
-							formatValue(delta.OIDeltaValue), delta.OIDeltaPercent))
+					for _, duration := range orderedOIDurations(oiData.Delta) {
+						delta := oiData.Delta[duration]
+						sb.WriteString(fmt.Sprintf("- %s Change: %s (%.2f%%)\n",
+							duration, formatValue(delta.OIDeltaValue), delta.OIDeltaPercent))
 					}
 				}
 				sb.WriteString("\n")

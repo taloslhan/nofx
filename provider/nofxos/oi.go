@@ -104,13 +104,18 @@ func (c *Client) fetchOIRanking(rankType, duration string, limit int) ([]OIPosit
 	return response.Data.Positions, response.Data.TimeRange, nil
 }
 
-// GetOITopPositions retrieves top OI increase positions (legacy compatibility)
-func (c *Client) GetOITopPositions() ([]OIPosition, error) {
-	positions, _, err := c.fetchOIRanking("top", "1h", 20)
+// GetOITopPositionsWithDuration retrieves top OI increase positions with the specified duration.
+func (c *Client) GetOITopPositionsWithDuration(duration string, limit int) ([]OIPosition, error) {
+	positions, _, err := c.fetchOIRanking("top", duration, limit)
 	if err != nil {
 		return nil, err
 	}
 	return positions, nil
+}
+
+// GetOITopPositions retrieves top OI increase positions (legacy compatibility)
+func (c *Client) GetOITopPositions() ([]OIPosition, error) {
+	return c.GetOITopPositionsWithDuration("1h", 20)
 }
 
 // GetOITopSymbols retrieves OI top coin symbol list
@@ -129,13 +134,18 @@ func (c *Client) GetOITopSymbols() ([]string, error) {
 	return symbols, nil
 }
 
-// GetOILowPositions retrieves OI decrease positions (for short opportunities)
-func (c *Client) GetOILowPositions() ([]OIPosition, error) {
-	positions, _, err := c.fetchOIRanking("low", "1h", 20)
+// GetOILowPositionsWithDuration retrieves OI decrease positions with the specified duration.
+func (c *Client) GetOILowPositionsWithDuration(duration string, limit int) ([]OIPosition, error) {
+	positions, _, err := c.fetchOIRanking("low", duration, limit)
 	if err != nil {
 		return nil, err
 	}
 	return positions, nil
+}
+
+// GetOILowPositions retrieves OI decrease positions (for short opportunities)
+func (c *Client) GetOILowPositions() ([]OIPosition, error) {
+	return c.GetOILowPositionsWithDuration("1h", 20)
 }
 
 // GetOILowSymbols retrieves OI low coin symbol list

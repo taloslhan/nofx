@@ -211,8 +211,8 @@ var DataDictionary = map[string]map[string]BilingualFieldDef{
 			NameZH: "持仓量变化",
 			NameEN: "OI Change",
 			Unit:   "USDT & %",
-			DescZH: "1小时内持仓量的变化。用于判断市场真实资金流向",
-			DescEN: "OI change in 1 hour. Used to determine real capital flow direction",
+			DescZH: "指定观察周期内持仓量的变化（具体周期见数据标题）。用于判断市场真实资金流向",
+			DescEN: "OI change within the observation period (see data header for the exact duration). Used to determine real capital flow direction",
 		},
 	},
 }
@@ -294,8 +294,8 @@ var TradingRules = struct {
 		},
 		"OIChangeThreshold": {
 			Value:    0.02,
-			DescZH:   "持仓量1小时内变化超过2%视为显著变化",
-			DescEN:   "OI change >2% in 1 hour is considered significant",
+			DescZH:   "持仓量在观察周期内变化超过2%视为显著变化（该阈值更适合短周期，更长周期应结合上下文重新评估）",
+			DescEN:   "OI change >2% in the observation period is considered significant (more suitable for shorter durations; reassess for longer durations)",
 			ReasonZH: "大额资金进出会导致持仓量显著变化",
 			ReasonEN: "Large capital flows cause significant OI changes",
 		},

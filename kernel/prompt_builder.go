@@ -168,7 +168,7 @@ func (pb *PromptBuilder) getDecisionRequirementsZH() string {
     "stop_loss": 0.1560,
     "take_profit": 0.1720,
     "confidence": 75,
-    "reasoning": "HUSDT在5分钟时间框架突破关键阻力位0.1630，持仓量1小时内增加+1.57M (+0.89%)，配合价格上涨+4.92%，符合'OI增加+价格上涨'的强多头模式。15分钟和1小时时间框架均呈现上涨趋势，多周期共振。建议开仓做多，止损设在突破点下方-5%，止盈目标+8%。"
+    "reasoning": "HUSDT在5分钟时间框架突破关键阻力位0.1630，持仓量在观察周期内增加+1.57M (+0.89%)，配合价格上涨+4.92%，符合'OI增加+价格上涨'的偏强多头模式。15分钟和1小时时间框架均呈现上涨趋势，多周期共振。建议开仓做多，止损设在突破点下方-5%，止盈目标+8%。"
   }
 ]
 ` + "```" + `
@@ -303,7 +303,7 @@ func (pb *PromptBuilder) getDecisionRequirementsEN() string {
     "stop_loss": 0.1560,
     "take_profit": 0.1720,
     "confidence": 75,
-    "reasoning": "HUSDT broke key resistance 0.1630 on 5M timeframe. OI increased +1.57M (+0.89%) in 1H paired with price +4.92%, matching 'OI up + price up' strong bullish pattern. Both 15M and 1H timeframes show uptrend, multi-timeframe resonance confirmed. Recommend long entry, stop-loss -5% below breakout, target +8% profit."
+    "reasoning": "HUSDT broke key resistance 0.1630 on the 5M timeframe. OI increased by +1.57M (+0.89%) in the observation period while price gained +4.92%, matching an 'OI up + price up' constructive bullish pattern. Both 15M and 1H timeframes show an uptrend, confirming multi-timeframe alignment. Recommend a long entry, stop-loss 5% below the breakout, and an 8% take-profit target."
   }
 ]
 ` + "```" + `

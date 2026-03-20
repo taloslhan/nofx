@@ -51,6 +51,9 @@ type StrategyConfig struct {
 
 	// Grid trading configuration (only used when StrategyType == "grid_trading")
 	GridConfig *GridStrategyConfig `json:"grid_config,omitempty"`
+
+	// Reverse strategy configuration (AI trading only)
+	ReverseStrategy *ReverseStrategyConfig `json:"reverse_strategy,omitempty"`
 }
 
 // GridStrategyConfig grid trading specific configuration
@@ -85,6 +88,15 @@ type GridStrategyConfig struct {
 	EnableDirectionAdjust bool `json:"enable_direction_adjust"`
 	// Direction bias ratio for long_bias/short_bias modes (default 0.7 = 70%/30%)
 	DirectionBiasRatio float64 `json:"direction_bias_ratio"`
+}
+
+// ReverseStrategyConfig controls the reverse-strategy transformer.
+type ReverseStrategyConfig struct {
+	Enabled            bool    `json:"enabled,omitempty"`
+	SwapSLTP           *bool   `json:"swap_sl_tp,omitempty"`
+	LeverageScale      float64 `json:"leverage_scale,omitempty"`
+	PositionScale      float64 `json:"position_scale,omitempty"`
+	MinRiskRewardRatio float64 `json:"min_risk_reward_ratio,omitempty"`
 }
 
 // PromptSectionsConfig editable sections of System Prompt

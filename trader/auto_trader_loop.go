@@ -7,6 +7,7 @@ import (
 	"nofx/logger"
 	"nofx/store"
 	"nofx/wallet"
+	"sort"
 	"strings"
 	"time"
 )
@@ -127,7 +128,6 @@ func (at *AutoTrader) runCycle() error {
 		logger.Infof("❌ Primary AI failed (no fallback configured): %v", err)
 	}
 
-
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
 		record.AIRequestDurationMs = aiDecision.AIRequestDurationMs
 		channelLabel := "primary"
@@ -246,6 +246,38 @@ func (at *AutoTrader) runCycle() error {
 	logger.Info(strings.Repeat("-", 70))
 	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
 	logger.Info(strings.Repeat("-", 70))
+
+	if at.decisionPipeline != nil && len(aiDecision.Decisions) > 0 {
+		transformedResults := at.decisionPipeline.Apply(aiDecision.Decisions)
+		transformedDecisions := make([]kernel.Decision, 0, len(transformedResults))
+		transformNames := make(map[string]struct{})
+
+		for _, result := range transformedResults {
+			transformedDecisions = append(transformedDecisions, result.Transformed)
+			for _, name := range result.Applied {
+				transformNames[name] = struct{}{}
+			}
+
+			if result.Original.Action != result.Transformed.Action {
+				logger.Infof("🔁 Decision transformed: %s %s → %s", result.Original.Symbol, result.Original.Action, result.Transformed.Action)
+			}
+		}
+
+		if len(transformNames) > 0 {
+			record.OriginalDecisionJSON = record.DecisionJSON
+			names := make([]string, 0, len(transformNames))
+			for name := range transformNames {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			record.TransformApplied = strings.Join(names, ",")
+			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("Decision transforms applied: %s", record.TransformApplied))
+
+			aiDecision.Decisions = transformedDecisions
+			decisionJSON, _ := json.MarshalIndent(aiDecision.Decisions, "", "  ")
+			record.DecisionJSON = string(decisionJSON)
+		}
+	}
 
 	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
 	sortedDecisions := sortDecisionsByPriority(aiDecision.Decisions)

@@ -135,7 +135,8 @@ type AutoTrader struct {
 	fallbackMcpClient     mcp.AIClient           // Fallback AI client (nil if not configured)
 	store                 *store.Store           // Data storage (decision records, etc.)
 	strategyEngine        *kernel.StrategyEngine // Strategy engine (uses strategy configuration)
-	cycleNumber           int                    // Current cycle number
+	decisionPipeline      *kernel.DecisionPipeline
+	cycleNumber           int // Current cycle number
 	initialBalance        float64
 	dailyPnL              float64
 	customPrompt          string // Custom trading strategy prompt
@@ -367,7 +368,11 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		return nil, fmt.Errorf("[%s] strategy not configured", config.Name)
 	}
 	strategyEngine := kernel.NewStrategyEngine(config.StrategyConfig)
+	decisionPipeline := buildDecisionPipeline(config.StrategyConfig)
 	logger.Infof("✓ [%s] Using strategy engine (strategy configuration loaded)", config.Name)
+	if decisionPipeline != nil {
+		logger.Infof("✓ [%s] Decision pipeline enabled: reverse strategy", config.Name)
+	}
 
 	return &AutoTrader{
 		id:                    config.ID,
@@ -382,6 +387,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		fallbackMcpClient:     fallbackMcpClient,
 		store:                 st,
 		strategyEngine:        strategyEngine,
+		decisionPipeline:      decisionPipeline,
 		cycleNumber:           cycleNumber,
 		initialBalance:        config.InitialBalance,
 		lastResetTime:         time.Now(),

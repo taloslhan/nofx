@@ -15,45 +15,49 @@ type DecisionStore struct {
 
 // DecisionRecordDB internal GORM model for decision_records table
 type DecisionRecordDB struct {
-	ID                  int64     `gorm:"primaryKey;autoIncrement"`
-	TraderID            string    `gorm:"column:trader_id;not null;index:idx_decision_records_trader_time"`
-	CycleNumber         int       `gorm:"column:cycle_number;not null"`
-	Timestamp           time.Time `gorm:"not null;index:idx_decision_records_trader_time,sort:desc;index:idx_decision_records_timestamp,sort:desc"`
-	SystemPrompt        string    `gorm:"column:system_prompt;default:''"`
-	InputPrompt         string    `gorm:"column:input_prompt;default:''"`
-	CoTTrace            string    `gorm:"column:cot_trace;default:''"`
-	DecisionJSON        string    `gorm:"column:decision_json;default:''"`
-	RawResponse         string    `gorm:"column:raw_response;default:''"`
-	CandidateCoins      string    `gorm:"column:candidate_coins;default:''"`
-	ExecutionLog        string    `gorm:"column:execution_log;default:''"`
-	Decisions           string    `gorm:"column:decisions;default:'[]'"`
-	Success             bool      `gorm:"default:false"`
-	ErrorMessage        string    `gorm:"column:error_message;default:''"`
-	AIRequestDurationMs int64     `gorm:"column:ai_request_duration_ms;default:0"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                   int64     `gorm:"primaryKey;autoIncrement"`
+	TraderID             string    `gorm:"column:trader_id;not null;index:idx_decision_records_trader_time"`
+	CycleNumber          int       `gorm:"column:cycle_number;not null"`
+	Timestamp            time.Time `gorm:"not null;index:idx_decision_records_trader_time,sort:desc;index:idx_decision_records_timestamp,sort:desc"`
+	SystemPrompt         string    `gorm:"column:system_prompt;default:''"`
+	InputPrompt          string    `gorm:"column:input_prompt;default:''"`
+	CoTTrace             string    `gorm:"column:cot_trace;default:''"`
+	DecisionJSON         string    `gorm:"column:decision_json;default:''"`
+	OriginalDecisionJSON string    `gorm:"column:original_decision_json;default:''"`
+	TransformApplied     string    `gorm:"column:transform_applied;default:''"`
+	RawResponse          string    `gorm:"column:raw_response;default:''"`
+	CandidateCoins       string    `gorm:"column:candidate_coins;default:''"`
+	ExecutionLog         string    `gorm:"column:execution_log;default:''"`
+	Decisions            string    `gorm:"column:decisions;default:'[]'"`
+	Success              bool      `gorm:"default:false"`
+	ErrorMessage         string    `gorm:"column:error_message;default:''"`
+	AIRequestDurationMs  int64     `gorm:"column:ai_request_duration_ms;default:0"`
+	CreatedAt            time.Time `json:"created_at"`
 }
 
 func (DecisionRecordDB) TableName() string { return "decision_records" }
 
 // DecisionRecord decision record (external API struct)
 type DecisionRecord struct {
-	ID                  int64              `json:"id"`
-	TraderID            string             `json:"trader_id"`
-	CycleNumber         int                `json:"cycle_number"`
-	Timestamp           time.Time          `json:"timestamp"`
-	SystemPrompt        string             `json:"system_prompt"`
-	InputPrompt         string             `json:"input_prompt"`
-	CoTTrace            string             `json:"cot_trace"`
-	DecisionJSON        string             `json:"decision_json"`
-	RawResponse         string             `json:"raw_response"` // Raw AI response for debugging
-	CandidateCoins      []string           `json:"candidate_coins"`
-	ExecutionLog        []string           `json:"execution_log"`
-	Success             bool               `json:"success"`
-	ErrorMessage        string             `json:"error_message"`
-	AIRequestDurationMs int64              `json:"ai_request_duration_ms"`
-	AccountState        AccountSnapshot    `json:"account_state"`
-	Positions           []PositionSnapshot `json:"positions"`
-	Decisions           []DecisionAction   `json:"decisions"`
+	ID                   int64              `json:"id"`
+	TraderID             string             `json:"trader_id"`
+	CycleNumber          int                `json:"cycle_number"`
+	Timestamp            time.Time          `json:"timestamp"`
+	SystemPrompt         string             `json:"system_prompt"`
+	InputPrompt          string             `json:"input_prompt"`
+	CoTTrace             string             `json:"cot_trace"`
+	DecisionJSON         string             `json:"decision_json"`
+	OriginalDecisionJSON string             `json:"original_decision_json"`
+	TransformApplied     string             `json:"transform_applied"`
+	RawResponse          string             `json:"raw_response"` // Raw AI response for debugging
+	CandidateCoins       []string           `json:"candidate_coins"`
+	ExecutionLog         []string           `json:"execution_log"`
+	Success              bool               `json:"success"`
+	ErrorMessage         string             `json:"error_message"`
+	AIRequestDurationMs  int64              `json:"ai_request_duration_ms"`
+	AccountState         AccountSnapshot    `json:"account_state"`
+	Positions            []PositionSnapshot `json:"positions"`
+	Decisions            []DecisionAction   `json:"decisions"`
 }
 
 // AccountSnapshot account state snapshot
@@ -116,6 +120,12 @@ func (s *DecisionStore) initTables() error {
 		var tableExists int64
 		s.db.Raw(`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'decision_records'`).Scan(&tableExists)
 		if tableExists > 0 {
+			if err := s.db.Exec(`ALTER TABLE decision_records ADD COLUMN IF NOT EXISTS original_decision_json TEXT NOT NULL DEFAULT ''`).Error; err != nil {
+				return fmt.Errorf("failed to add original_decision_json column: %w", err)
+			}
+			if err := s.db.Exec(`ALTER TABLE decision_records ADD COLUMN IF NOT EXISTS transform_applied TEXT NOT NULL DEFAULT ''`).Error; err != nil {
+				return fmt.Errorf("failed to add transform_applied column: %w", err)
+			}
 			return nil
 		}
 	}
@@ -125,18 +135,20 @@ func (s *DecisionStore) initTables() error {
 // toRecord converts DB model to API struct
 func (db *DecisionRecordDB) toRecord() *DecisionRecord {
 	record := &DecisionRecord{
-		ID:                  db.ID,
-		TraderID:            db.TraderID,
-		CycleNumber:         db.CycleNumber,
-		Timestamp:           db.Timestamp,
-		SystemPrompt:        db.SystemPrompt,
-		InputPrompt:         db.InputPrompt,
-		CoTTrace:            db.CoTTrace,
-		DecisionJSON:        db.DecisionJSON,
-		RawResponse:         db.RawResponse,
-		Success:             db.Success,
-		ErrorMessage:        db.ErrorMessage,
-		AIRequestDurationMs: db.AIRequestDurationMs,
+		ID:                   db.ID,
+		TraderID:             db.TraderID,
+		CycleNumber:          db.CycleNumber,
+		Timestamp:            db.Timestamp,
+		SystemPrompt:         db.SystemPrompt,
+		InputPrompt:          db.InputPrompt,
+		CoTTrace:             db.CoTTrace,
+		DecisionJSON:         db.DecisionJSON,
+		OriginalDecisionJSON: db.OriginalDecisionJSON,
+		TransformApplied:     db.TransformApplied,
+		RawResponse:          db.RawResponse,
+		Success:              db.Success,
+		ErrorMessage:         db.ErrorMessage,
+		AIRequestDurationMs:  db.AIRequestDurationMs,
 	}
 	json.Unmarshal([]byte(db.CandidateCoins), &record.CandidateCoins)
 	json.Unmarshal([]byte(db.ExecutionLog), &record.ExecutionLog)
@@ -158,20 +170,22 @@ func (s *DecisionStore) LogDecision(record *DecisionRecord) error {
 	decisionsJSON, _ := json.Marshal(record.Decisions)
 
 	dbRecord := &DecisionRecordDB{
-		TraderID:            record.TraderID,
-		CycleNumber:         record.CycleNumber,
-		Timestamp:           record.Timestamp,
-		SystemPrompt:        record.SystemPrompt,
-		InputPrompt:         record.InputPrompt,
-		CoTTrace:            record.CoTTrace,
-		DecisionJSON:        record.DecisionJSON,
-		RawResponse:         record.RawResponse,
-		CandidateCoins:      string(candidateCoinsJSON),
-		ExecutionLog:        string(executionLogJSON),
-		Decisions:           string(decisionsJSON),
-		Success:             record.Success,
-		ErrorMessage:        record.ErrorMessage,
-		AIRequestDurationMs: record.AIRequestDurationMs,
+		TraderID:             record.TraderID,
+		CycleNumber:          record.CycleNumber,
+		Timestamp:            record.Timestamp,
+		SystemPrompt:         record.SystemPrompt,
+		InputPrompt:          record.InputPrompt,
+		CoTTrace:             record.CoTTrace,
+		DecisionJSON:         record.DecisionJSON,
+		OriginalDecisionJSON: record.OriginalDecisionJSON,
+		TransformApplied:     record.TransformApplied,
+		RawResponse:          record.RawResponse,
+		CandidateCoins:       string(candidateCoinsJSON),
+		ExecutionLog:         string(executionLogJSON),
+		Decisions:            string(decisionsJSON),
+		Success:              record.Success,
+		ErrorMessage:         record.ErrorMessage,
+		AIRequestDurationMs:  record.AIRequestDurationMs,
 	}
 
 	if err := s.db.Create(dbRecord).Error; err != nil {

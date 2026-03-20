@@ -264,7 +264,11 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	// Use 80% tolerance: market may drift during AI decision cycle, so allow slightly relaxed ratio
 	if at.strategyEngine != nil {
 		riskConfig := at.strategyEngine.GetRiskControlConfig()
-		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio*0.8); err != nil {
+		minRiskRewardRatio := riskConfig.MinRiskRewardRatio
+		if hasDecisionTransform(decision, "reverse") {
+			minRiskRewardRatio = at.getReverseMinRiskRewardRatio()
+		}
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, minRiskRewardRatio*0.8); err != nil {
 			return fmt.Errorf("[pre-execution R:R check] %w", err)
 		}
 	}
@@ -399,7 +403,11 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	// Use 80% tolerance: market may drift during AI decision cycle
 	if at.strategyEngine != nil {
 		riskConfig := at.strategyEngine.GetRiskControlConfig()
-		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, riskConfig.MinRiskRewardRatio*0.8); err != nil {
+		minRiskRewardRatio := riskConfig.MinRiskRewardRatio
+		if hasDecisionTransform(decision, "reverse") {
+			minRiskRewardRatio = at.getReverseMinRiskRewardRatio()
+		}
+		if err := kernel.ValidateRiskReward(decision.Action, marketData.CurrentPrice, decision.StopLoss, decision.TakeProfit, minRiskRewardRatio*0.8); err != nil {
 			return fmt.Errorf("[pre-execution R:R check] %w", err)
 		}
 	}

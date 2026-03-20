@@ -22,8 +22,8 @@ type NetFlowResponse struct {
 	Data    struct {
 		Netflows  []NetFlowPosition `json:"netflows"`
 		Count     int               `json:"count"`
-		Type      string            `json:"type"`      // institution or personal
-		Trade     string            `json:"trade"`     // futures or spot
+		Type      string            `json:"type"`  // institution or personal
+		Trade     string            `json:"trade"` // futures or spot
 		TimeRange string            `json:"time_range"`
 		RankType  string            `json:"rank_type"` // top or low
 		Limit     int               `json:"limit"`
@@ -136,7 +136,7 @@ func formatNetFlowRankingZH(data *NetFlowRankingData) string {
 	// Institution inflow
 	if len(data.InstitutionFutureTop) > 0 {
 		sb.WriteString("### 机构资金流入榜\n")
-		sb.WriteString("Smart Money买入信号:\n\n")
+		sb.WriteString("机构资金流入（仅供参考，非确定性信号）:\n\n")
 		sb.WriteString("| 排名 | 币种 | 流入金额(USDT) | 价格 |\n")
 		sb.WriteString("|------|------|----------------|------|\n")
 		for _, pos := range data.InstitutionFutureTop {
@@ -149,7 +149,7 @@ func formatNetFlowRankingZH(data *NetFlowRankingData) string {
 	// Institution outflow
 	if len(data.InstitutionFutureLow) > 0 {
 		sb.WriteString("### 机构资金流出榜\n")
-		sb.WriteString("Smart Money卖出信号:\n\n")
+		sb.WriteString("机构资金流出（仅供参考，非确定性信号）:\n\n")
 		sb.WriteString("| 排名 | 币种 | 流出金额(USDT) | 价格 |\n")
 		sb.WriteString("|------|------|----------------|------|\n")
 		for _, pos := range data.InstitutionFutureLow {
@@ -163,35 +163,38 @@ func formatNetFlowRankingZH(data *NetFlowRankingData) string {
 	if len(data.PersonalFutureTop) > 0 || len(data.PersonalFutureLow) > 0 {
 		sb.WriteString("### 散户资金动向\n")
 		if len(data.PersonalFutureTop) > 0 {
-			sb.WriteString("散户买入: ")
+			sb.WriteString("#### 散户资金流入\n\n")
+			sb.WriteString("| 排名 | 币种 | 流入金额(USDT) | 价格 |\n")
+			sb.WriteString("|------|------|----------------|------|\n")
 			for i, pos := range data.PersonalFutureTop {
-				if i >= 3 {
+				if i >= 5 {
 					break
 				}
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(fmt.Sprintf("%s(%s)", pos.Symbol, formatValue(pos.Amount)))
+				sb.WriteString(fmt.Sprintf("| %d | %s | %s | $%.4f |\n",
+					pos.Rank, pos.Symbol, formatValue(pos.Amount), pos.Price))
 			}
 			sb.WriteString("\n")
 		}
 		if len(data.PersonalFutureLow) > 0 {
-			sb.WriteString("散户卖出: ")
+			sb.WriteString("#### 散户资金流出\n\n")
+			sb.WriteString("| 排名 | 币种 | 流出金额(USDT) | 价格 |\n")
+			sb.WriteString("|------|------|----------------|------|\n")
 			for i, pos := range data.PersonalFutureLow {
-				if i >= 3 {
+				if i >= 5 {
 					break
 				}
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(fmt.Sprintf("%s(%s)", pos.Symbol, formatValue(pos.Amount)))
+				sb.WriteString(fmt.Sprintf("| %d | %s | %s | $%.4f |\n",
+					pos.Rank, pos.Symbol, formatValue(pos.Amount), pos.Price))
 			}
 			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
 	}
 
-	sb.WriteString("**解读**: 机构买入+散户卖出=强烈看多 | 机构卖出+散户买入=强烈看空\n\n")
+	sb.WriteString("**解读**:\n")
+	sb.WriteString("- 机构买入 + 散户卖出 = 偏强看多，常见于机构吸筹、散户承压离场\n")
+	sb.WriteString("- 机构卖出 + 散户买入 = 偏强看空，常见于机构减仓、散户逆势接盘\n")
+	sb.WriteString("- 机构买入 + 散户买入 = 一致性看多，趋势可能延续，但需警惕情绪过热\n")
+	sb.WriteString("- 机构卖出 + 散户卖出 = 一致性看空，恐慌释放后需观察是否接近超卖区域\n\n")
 	return sb.String()
 }
 
@@ -203,7 +206,7 @@ func formatNetFlowRankingEN(data *NetFlowRankingData) string {
 	// Institution inflow
 	if len(data.InstitutionFutureTop) > 0 {
 		sb.WriteString("### Institution Inflow\n")
-		sb.WriteString("Smart Money buying signals:\n\n")
+		sb.WriteString("Institutional inflow (reference only, not a deterministic signal):\n\n")
 		sb.WriteString("| Rank | Symbol | Inflow (USDT) | Price |\n")
 		sb.WriteString("|------|--------|---------------|-------|\n")
 		for _, pos := range data.InstitutionFutureTop {
@@ -216,7 +219,7 @@ func formatNetFlowRankingEN(data *NetFlowRankingData) string {
 	// Institution outflow
 	if len(data.InstitutionFutureLow) > 0 {
 		sb.WriteString("### Institution Outflow\n")
-		sb.WriteString("Smart Money selling signals:\n\n")
+		sb.WriteString("Institutional outflow (reference only, not a deterministic signal):\n\n")
 		sb.WriteString("| Rank | Symbol | Outflow (USDT) | Price |\n")
 		sb.WriteString("|------|--------|----------------|-------|\n")
 		for _, pos := range data.InstitutionFutureLow {
@@ -230,34 +233,37 @@ func formatNetFlowRankingEN(data *NetFlowRankingData) string {
 	if len(data.PersonalFutureTop) > 0 || len(data.PersonalFutureLow) > 0 {
 		sb.WriteString("### Retail Flow\n")
 		if len(data.PersonalFutureTop) > 0 {
-			sb.WriteString("Retail buying: ")
+			sb.WriteString("#### Retail Inflow\n\n")
+			sb.WriteString("| Rank | Symbol | Inflow (USDT) | Price |\n")
+			sb.WriteString("|------|--------|---------------|-------|\n")
 			for i, pos := range data.PersonalFutureTop {
-				if i >= 3 {
+				if i >= 5 {
 					break
 				}
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(fmt.Sprintf("%s(%s)", pos.Symbol, formatValue(pos.Amount)))
+				sb.WriteString(fmt.Sprintf("| %d | %s | %s | $%.4f |\n",
+					pos.Rank, pos.Symbol, formatValue(pos.Amount), pos.Price))
 			}
 			sb.WriteString("\n")
 		}
 		if len(data.PersonalFutureLow) > 0 {
-			sb.WriteString("Retail selling: ")
+			sb.WriteString("#### Retail Outflow\n\n")
+			sb.WriteString("| Rank | Symbol | Outflow (USDT) | Price |\n")
+			sb.WriteString("|------|--------|----------------|-------|\n")
 			for i, pos := range data.PersonalFutureLow {
-				if i >= 3 {
+				if i >= 5 {
 					break
 				}
-				if i > 0 {
-					sb.WriteString(", ")
-				}
-				sb.WriteString(fmt.Sprintf("%s(%s)", pos.Symbol, formatValue(pos.Amount)))
+				sb.WriteString(fmt.Sprintf("| %d | %s | %s | $%.4f |\n",
+					pos.Rank, pos.Symbol, formatValue(pos.Amount), pos.Price))
 			}
 			sb.WriteString("\n")
 		}
-		sb.WriteString("\n")
 	}
 
-	sb.WriteString("**Key**: Institution buy + Retail sell = Strong bullish | Institution sell + Retail buy = Strong bearish\n\n")
+	sb.WriteString("**Key**:\n")
+	sb.WriteString("- Institution buy + Retail sell = Stronger bullish bias, often showing accumulation against retail pressure\n")
+	sb.WriteString("- Institution sell + Retail buy = Stronger bearish bias, often showing distribution into retail demand\n")
+	sb.WriteString("- Institution buy + Retail buy = Consensus bullish, with momentum support but also a risk of overheating\n")
+	sb.WriteString("- Institution sell + Retail sell = Consensus bearish, where panic may build toward oversold conditions\n\n")
 	return sb.String()
 }

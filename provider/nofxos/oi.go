@@ -183,7 +183,7 @@ func formatOIRankingZH(data *OIRankingData) string {
 
 	if len(data.TopPositions) > 0 {
 		sb.WriteString("### 持仓增加榜\n")
-		sb.WriteString("资金流入，趋势延续或新仓建立信号:\n\n")
+		sb.WriteString("资金流入趋势，可能表示趋势延续或新仓建立:\n\n")
 		sb.WriteString("| 排名 | 币种 | 持仓变化(USDT) | OI变化% | 价格变化% |\n")
 		sb.WriteString("|------|------|----------------|---------|----------|\n")
 		for _, pos := range data.TopPositions {
@@ -196,7 +196,7 @@ func formatOIRankingZH(data *OIRankingData) string {
 
 	if len(data.LowPositions) > 0 {
 		sb.WriteString("### 持仓减少榜\n")
-		sb.WriteString("资金流出，趋势反转或仓位平仓信号:\n\n")
+		sb.WriteString("资金流出趋势，可能表示趋势反转或存量仓位平仓:\n\n")
 		sb.WriteString("| 排名 | 币种 | 持仓变化(USDT) | OI变化% | 价格变化% |\n")
 		sb.WriteString("|------|------|----------------|---------|----------|\n")
 		for _, pos := range data.LowPositions {
@@ -207,7 +207,11 @@ func formatOIRankingZH(data *OIRankingData) string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("**解读**: OI增+价涨=多头主导 | OI增+价跌=空头主导 | OI减+价涨=空头平仓 | OI减+价跌=多头平仓\n\n")
+	sb.WriteString("**解读**:\n")
+	sb.WriteString("- OI增 + 价涨 = 多头主导，通常代表新多开仓，趋势延续概率更高\n")
+	sb.WriteString("- OI增 + 价跌 = 空头主导，通常代表新空开仓，下跌压力可能延续\n")
+	sb.WriteString("- OI减 + 价涨 = 空头平仓，价格反弹可能更多来自回补而非新增买盘\n")
+	sb.WriteString("- OI减 + 价跌 = 多头平仓，抛压集中释放后需结合后续承接判断是否接近阶段性底部\n\n")
 	return sb.String()
 }
 
@@ -218,7 +222,7 @@ func formatOIRankingEN(data *OIRankingData) string {
 
 	if len(data.TopPositions) > 0 {
 		sb.WriteString("### OI Increase Ranking\n")
-		sb.WriteString("Capital inflow signals - trend continuation or new positions:\n\n")
+		sb.WriteString("Capital inflow trend, which may indicate trend continuation or new positioning:\n\n")
 		sb.WriteString("| Rank | Symbol | OI Change (USDT) | OI Change % | Price Change % |\n")
 		sb.WriteString("|------|--------|------------------|-------------|----------------|\n")
 		for _, pos := range data.TopPositions {
@@ -231,7 +235,7 @@ func formatOIRankingEN(data *OIRankingData) string {
 
 	if len(data.LowPositions) > 0 {
 		sb.WriteString("### OI Decrease Ranking\n")
-		sb.WriteString("Capital outflow signals - trend reversal or position closing:\n\n")
+		sb.WriteString("Capital outflow trend, which may indicate trend reversal or position closing:\n\n")
 		sb.WriteString("| Rank | Symbol | OI Change (USDT) | OI Change % | Price Change % |\n")
 		sb.WriteString("|------|--------|------------------|-------------|----------------|\n")
 		for _, pos := range data.LowPositions {
@@ -242,6 +246,10 @@ func formatOIRankingEN(data *OIRankingData) string {
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("**Key**: OI up + Price up = Bulls dominant | OI up + Price down = Bears dominant | OI down + Price up = Short covering | OI down + Price down = Long liquidation\n\n")
+	sb.WriteString("**Key**:\n")
+	sb.WriteString("- OI up + Price up = Bulls dominant, often showing fresh long positioning and a higher chance of trend continuation\n")
+	sb.WriteString("- OI up + Price down = Bears dominant, often showing fresh short positioning and sustained downside pressure\n")
+	sb.WriteString("- OI down + Price up = Short covering, where the rebound may be driven more by covering than by new spot demand\n")
+	sb.WriteString("- OI down + Price down = Long liquidation, where forced exits may signal washout but still require follow-through confirmation\n\n")
 	return sb.String()
 }

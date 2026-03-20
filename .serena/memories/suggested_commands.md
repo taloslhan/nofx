@@ -1,0 +1,1 @@
+常用命令：`go test ./...` 运行后端测试；`go test ./kernel ./provider/nofxos` 运行本次相关包测试；`go build -o nofx` 构建后端；`go run main.go` 启动后端；`cd web && npm run test` 运行前端测试；`cd web && npm run build` 构建前端；`gofmt -w <files>` 格式化 Go 文件；Makefile 还提供 `make test`、`make build`、`make run`、`make fmt`、`make lint`。

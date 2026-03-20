@@ -1,0 +1,1 @@
+NOFX 是一个开源的自主 AI 交易助手，后端以 Go 为主，前端包含 React Web 界面。仓库核心目录包括 kernel（策略/提示词/决策引擎）、provider（交易所与数据源接入）、trader（自动交易执行）、store（配置与持久化）、api（HTTP API）、telegram（Telegram Agent/Bot）、web（前端）。

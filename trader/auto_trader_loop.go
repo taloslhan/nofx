@@ -279,6 +279,12 @@ func (at *AutoTrader) runCycle() error {
 		}
 	}
 
+	aiDecision.Decisions = at.planReverseShadowDecisions(aiDecision.Decisions)
+	if len(aiDecision.Decisions) > 0 {
+		decisionJSON, _ := json.MarshalIndent(aiDecision.Decisions, "", "  ")
+		record.DecisionJSON = string(decisionJSON)
+	}
+
 	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
 	sortedDecisions := sortDecisionsByPriority(aiDecision.Decisions)
 
@@ -403,6 +409,7 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 
 	// Current position key set (for cleaning up closed position records)
 	currentPositionKeys := make(map[string]bool)
+	currentExchangePositionKeys := make(map[string]bool)
 
 	for _, pos := range positions {
 		symbol := pos["symbol"].(string)
@@ -436,15 +443,21 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		// Get position open time from exchange (preferred) or fallback to local tracking
 		posKey := symbol + "_" + side
 		currentPositionKeys[posKey] = true
+		currentExchangePositionKeys[reversePositionKey(symbol, side)] = true
 
 		var updateTime int64
 		// Priority 1: Get from database (trader_positions table) - most accurate
+		var dbPos *store.TraderPosition
 		if at.store != nil {
-			if dbPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, symbol, side); err == nil && dbPos != nil {
+			if currentDBPos, err := at.store.Position().GetOpenPositionBySymbol(at.id, symbol, side); err == nil && currentDBPos != nil {
+				dbPos = currentDBPos
 				if dbPos.EntryTime > 0 {
 					updateTime = dbPos.EntryTime
 				}
 			}
+		}
+		if dbPos != nil {
+			at.reconcileReversePositionState(symbol, side, dbPos.IsReverse)
 		}
 		// Priority 2: Get from exchange API (Bybit: createdTime, OKX: createdTime)
 		if updateTime == 0 {
@@ -464,6 +477,10 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		at.peakPnLCacheMutex.RLock()
 		peakPnlPct := at.peakPnLCache[posKey]
 		at.peakPnLCacheMutex.RUnlock()
+
+		if at.isReversePosition(symbol, side) {
+			continue
+		}
 
 		positionInfos = append(positionInfos, kernel.PositionInfo{
 			Symbol:           symbol,
@@ -487,6 +504,7 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 			delete(at.positionFirstSeenTime, key)
 		}
 	}
+	at.syncReversePositionKeys(currentExchangePositionKeys)
 
 	// 3. Use strategy engine to get candidate coins (must have strategy engine)
 	var candidateCoins []kernel.CandidateCoin

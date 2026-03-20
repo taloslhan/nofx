@@ -296,6 +296,10 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
 
+	if hasDecisionTransform(decision, "reverse") {
+		at.markReversePosition(decision.Symbol, "long")
+	}
+
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "open_long", quantity, marketData.CurrentPrice, decision.Leverage, 0)
 
@@ -435,6 +439,10 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 
 	logger.Infof("  ✓ Position opened successfully, order ID: %v, quantity: %.4f", order["orderId"], quantity)
 
+	if hasDecisionTransform(decision, "reverse") {
+		at.markReversePosition(decision.Symbol, "short")
+	}
+
 	// Record order to database and poll for confirmation
 	at.recordAndConfirmOrder(order, decision.Symbol, "open_short", quantity, marketData.CurrentPrice, decision.Leverage, 0)
 
@@ -485,6 +493,8 @@ func (at *AutoTrader) executeCloseLongWithRecord(decision *kernel.Decision, acti
 	at.SetLastCloseTime(snapshot.normalizedSymbol, time.Now())
 	delete(at.positionFirstSeenTime, decision.Symbol+"_long")
 	delete(at.positionFirstSeenTime, snapshot.normalizedSymbol+"_long")
+	at.clearReversePosition(decision.Symbol, "long")
+	at.clearReversePosition(snapshot.normalizedSymbol, "long")
 	at.ClearPeakPnLCache(decision.Symbol, "long")
 	at.ClearPeakPnLCache(snapshot.normalizedSymbol, "long")
 
@@ -524,6 +534,8 @@ func (at *AutoTrader) executeCloseShortWithRecord(decision *kernel.Decision, act
 	at.SetLastCloseTime(snapshot.normalizedSymbol, time.Now())
 	delete(at.positionFirstSeenTime, decision.Symbol+"_short")
 	delete(at.positionFirstSeenTime, snapshot.normalizedSymbol+"_short")
+	at.clearReversePosition(decision.Symbol, "short")
+	at.clearReversePosition(snapshot.normalizedSymbol, "short")
 	at.ClearPeakPnLCache(decision.Symbol, "short")
 	at.ClearPeakPnLCache(snapshot.normalizedSymbol, "short")
 

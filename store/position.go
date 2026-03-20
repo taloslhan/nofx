@@ -113,6 +113,7 @@ type TraderPosition struct {
 	RealizedPnL        float64 `gorm:"column:realized_pnl;default:0" json:"realized_pnl"`
 	Fee                float64 `gorm:"column:fee;default:0" json:"fee"`
 	Leverage           int     `gorm:"column:leverage;default:1" json:"leverage"`
+	IsReverse          bool    `gorm:"column:is_reverse;default:false;index:idx_positions_reverse" json:"is_reverse"`
 	Status             string  `gorm:"column:status;default:OPEN;index:idx_positions_status" json:"status"`
 	CloseReason        string  `gorm:"column:close_reason;default:''" json:"close_reason"`
 	Source             string  `gorm:"column:source;default:system" json:"source"`
@@ -159,8 +160,11 @@ func (s *PositionStore) InitTables() error {
 				}
 			}
 
+			s.db.Exec(`ALTER TABLE trader_positions ADD COLUMN IF NOT EXISTS is_reverse BOOLEAN NOT NULL DEFAULT FALSE`)
+
 			// Just ensure index exists
 			s.db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_positions_exchange_pos_unique ON trader_positions(exchange_id, exchange_position_id) WHERE exchange_position_id != ''`)
+			s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_positions_reverse ON trader_positions(is_reverse)`)
 			return nil
 		}
 	}
@@ -183,6 +187,17 @@ func (s *PositionStore) InitTables() error {
 	}
 
 	return nil
+}
+
+func normalizePositionQuerySide(side string) string {
+	switch strings.ToUpper(strings.TrimSpace(side)) {
+	case "LONG", "BUY":
+		return "LONG"
+	case "SHORT", "SELL":
+		return "SHORT"
+	default:
+		return strings.ToUpper(strings.TrimSpace(side))
+	}
 }
 
 // Create creates position record
@@ -349,6 +364,7 @@ func (s *PositionStore) GetOpenPositions(traderID string) ([]*TraderPosition, er
 
 // GetOpenPositionBySymbol gets open position for specified symbol and direction
 func (s *PositionStore) GetOpenPositionBySymbol(traderID, symbol, side string) (*TraderPosition, error) {
+	side = normalizePositionQuerySide(side)
 	var pos TraderPosition
 	err := s.db.Where("trader_id = ? AND symbol = ? AND side = ? AND status = ?", traderID, symbol, side, "OPEN").
 		Order("entry_time DESC").
@@ -378,6 +394,46 @@ func (s *PositionStore) GetOpenPositionBySymbol(traderID, symbol, side string) (
 		return nil, nil
 	}
 	return nil, err
+}
+
+func (s *PositionStore) SetPositionReverseFlag(id int64, isReverse bool) error {
+	return s.db.Model(&TraderPosition{}).
+		Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"is_reverse": isReverse,
+			"updated_at": time.Now().UTC().UnixMilli(),
+		}).Error
+}
+
+func (s *PositionStore) SetOpenPositionReverseFlag(traderID, symbol, side string, isReverse bool) error {
+	pos, err := s.GetOpenPositionBySymbol(traderID, symbol, side)
+	if err != nil {
+		return err
+	}
+	if pos == nil {
+		return nil
+	}
+	if pos.IsReverse == isReverse {
+		return nil
+	}
+	return s.SetPositionReverseFlag(pos.ID, isReverse)
+}
+
+func (s *PositionStore) GetOpenReversePositions(traderID string) ([]*TraderPosition, error) {
+	var positions []*TraderPosition
+	err := s.db.Where("trader_id = ? AND status = ? AND is_reverse = ?", traderID, "OPEN", true).
+		Order("entry_time DESC").
+		Find(&positions).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to query open reverse positions: %w", err)
+	}
+
+	for _, pos := range positions {
+		if pos.EntryQuantity == 0 {
+			pos.EntryQuantity = pos.Quantity
+		}
+	}
+	return positions, nil
 }
 
 // GetClosedPositions gets closed positions

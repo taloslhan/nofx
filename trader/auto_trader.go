@@ -150,6 +150,8 @@ type AutoTrader struct {
 	positionFirstSeenTime map[string]int64 // Position first seen time (symbol_side -> timestamp in milliseconds)
 	lastCloseTime         map[string]time.Time
 	lastCloseTimeMutex    sync.RWMutex
+	reversePositionKeys   map[string]bool // Reverse-shadow positions hidden from AI (normalized symbol_side)
+	reversePositionKeysMu sync.RWMutex
 	stopMonitorCh         chan struct{}      // Used to stop monitoring goroutine
 	monitorWg             sync.WaitGroup     // Used to wait for monitoring goroutine to finish
 	peakPnLCache          map[string]float64 // Peak profit cache (symbol -> peak P&L percentage)
@@ -397,6 +399,8 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		positionFirstSeenTime: make(map[string]int64),
 		lastCloseTime:         make(map[string]time.Time),
 		lastCloseTimeMutex:    sync.RWMutex{},
+		reversePositionKeys:   make(map[string]bool),
+		reversePositionKeysMu: sync.RWMutex{},
 		stopMonitorCh:         make(chan struct{}),
 		monitorWg:             sync.WaitGroup{},
 		peakPnLCache:          make(map[string]float64),
@@ -423,6 +427,8 @@ func (at *AutoTrader) Run() error {
 	at.runPreLaunchChecks()
 	at.monitorWg.Add(1)
 	defer at.monitorWg.Done()
+
+	at.recoverReversePositionsFromStore()
 
 	// Start drawdown monitoring (tracking only, no auto-close)
 	at.startDrawdownMonitor()

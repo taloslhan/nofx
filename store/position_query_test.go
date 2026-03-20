@@ -320,3 +320,45 @@ func TestPositionStatsUseNetPnLForDerivedMetrics(t *testing.T) {
 		t.Fatalf("expected ETHUSDT as losing symbol after fees, got %+v", historySummary.WorstSymbols)
 	}
 }
+
+func TestPositionStoreReverseFlagPersistence(t *testing.T) {
+	db := setupPositionQueryTestDB(t)
+	positionStore := NewPositionStore(db)
+
+	nowMs := time.Now().UTC().UnixMilli()
+	pos := &TraderPosition{
+		TraderID:   "trader-reverse",
+		ExchangeID: "exchange-1",
+		Symbol:     "BTCUSDT",
+		Side:       "LONG",
+		Quantity:   1,
+		EntryPrice: 50000,
+		EntryTime:  nowMs,
+		Status:     "OPEN",
+		CreatedAt:  nowMs,
+		UpdatedAt:  nowMs,
+	}
+	if err := positionStore.CreateOpenPosition(pos); err != nil {
+		t.Fatalf("failed to create position: %v", err)
+	}
+
+	if err := positionStore.SetOpenPositionReverseFlag("trader-reverse", "BTCUSDT", "long", true); err != nil {
+		t.Fatalf("failed to set reverse flag: %v", err)
+	}
+
+	loaded, err := positionStore.GetOpenPositionBySymbol("trader-reverse", "BTCUSDT", "long")
+	if err != nil {
+		t.Fatalf("failed to reload position: %v", err)
+	}
+	if loaded == nil || !loaded.IsReverse {
+		t.Fatalf("expected open position to be marked reverse")
+	}
+
+	reversePositions, err := positionStore.GetOpenReversePositions("trader-reverse")
+	if err != nil {
+		t.Fatalf("failed to query open reverse positions: %v", err)
+	}
+	if len(reversePositions) != 1 {
+		t.Fatalf("expected 1 reverse position, got %d", len(reversePositions))
+	}
+}

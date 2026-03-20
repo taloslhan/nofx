@@ -16,10 +16,12 @@ func newTestAutoTrader(strategyConfig *store.StrategyConfig) *AutoTrader {
 		config: AutoTraderConfig{
 			StrategyConfig: strategyConfig,
 		},
-		peakPnLCache:       make(map[string]float64),
-		peakPnLCacheMutex:  sync.RWMutex{},
-		lastCloseTime:      make(map[string]time.Time),
-		lastCloseTimeMutex: sync.RWMutex{},
+		peakPnLCache:          make(map[string]float64),
+		peakPnLCacheMutex:     sync.RWMutex{},
+		lastCloseTime:         make(map[string]time.Time),
+		lastCloseTimeMutex:    sync.RWMutex{},
+		reversePositionKeys:   make(map[string]bool),
+		reversePositionKeysMu: sync.RWMutex{},
 	}
 	return at
 }

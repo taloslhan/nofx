@@ -51,6 +51,8 @@ export interface StrategyConfig {
   prompt_sections?: PromptSectionsConfig
   // Grid trading configuration (only used when strategy_type is 'grid_trading')
   grid_config?: GridStrategyConfig
+  // Reverse strategy configuration (AI trading only)
+  reverse_strategy?: ReverseStrategyConfig
 }
 
 // Grid trading specific configuration
@@ -85,6 +87,14 @@ export interface GridStrategyConfig {
   enable_direction_adjust?: boolean
   // Direction bias ratio for long_bias/short_bias modes (default 0.7 = 70%/30%)
   direction_bias_ratio?: number
+}
+
+export interface ReverseStrategyConfig {
+  enabled?: boolean
+  swap_sl_tp?: boolean
+  leverage_scale?: number
+  position_scale?: number
+  min_risk_reward_ratio?: number
 }
 
 export interface CoinSourceConfig {

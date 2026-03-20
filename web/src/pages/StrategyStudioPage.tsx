@@ -16,6 +16,7 @@ import {
   Activity,
   Save,
   Sparkles,
+  Shuffle,
   Eye,
   Play,
   FileText,
@@ -35,9 +36,13 @@ import { confirmToast, notify } from '../lib/notify'
 import { CoinSourceEditor } from '../components/strategy/CoinSourceEditor'
 import { IndicatorEditor } from '../components/strategy/IndicatorEditor'
 import { RiskControlEditor } from '../components/strategy/RiskControlEditor'
+import { ReverseStrategyEditor } from '../components/strategy/ReverseStrategyEditor'
 import { PromptSectionsEditor } from '../components/strategy/PromptSectionsEditor'
 import { PublishSettingsEditor } from '../components/strategy/PublishSettingsEditor'
-import { GridConfigEditor, defaultGridConfig } from '../components/strategy/GridConfigEditor'
+import {
+  GridConfigEditor,
+  defaultGridConfig,
+} from '../components/strategy/GridConfigEditor'
 import { DeepVoidBackground } from '../components/common/DeepVoidBackground'
 import { t } from '../i18n/translations'
 
@@ -48,8 +53,12 @@ export function StrategyStudioPage() {
   const { language } = useLanguage()
 
   const [strategies, setStrategies] = useState<Strategy[]>([])
-  const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null)
-  const [editingConfig, setEditingConfig] = useState<StrategyConfig | null>(null)
+  const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(
+    null
+  )
+  const [editingConfig, setEditingConfig] = useState<StrategyConfig | null>(
+    null
+  )
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -60,18 +69,25 @@ export function StrategyStudioPage() {
   const [selectedModelId, setSelectedModelId] = useState<string>('')
 
   // Accordion states for left panel
+  // Responsive panel visibility
+  const [showLeftPanel, setShowLeftPanel] = useState(false)
+  const [showRightPanel, setShowRightPanel] = useState(false)
+
   const [expandedSections, setExpandedSections] = useState({
     gridConfig: true,
     coinSource: true,
     indicators: false,
     riskControl: false,
+    reverseStrategy: false,
     promptSections: false,
     customPrompt: false,
     publishSettings: false,
   })
 
   // Right panel states
-  const [activeRightTab, setActiveRightTab] = useState<'prompt' | 'test'>('prompt')
+  const [activeRightTab, setActiveRightTab] = useState<'prompt' | 'test'>(
+    'prompt'
+  )
   const [promptPreview, setPromptPreview] = useState<{
     system_prompt: string
     user_prompt?: string
@@ -110,7 +126,7 @@ export function StrategyStudioPage() {
       if (response.ok) {
         const data = await response.json()
         // Backend returns an array, not { models: [] }
-        const allModels = Array.isArray(data) ? data : (data.models || [])
+        const allModels = Array.isArray(data) ? data : data.models || []
         const enabledModels = allModels.filter((m: AIModel) => m.enabled)
         setAiModels(enabledModels)
         if (enabledModels.length > 0 && !selectedModelId) {
@@ -176,7 +192,7 @@ export function StrategyStudioPage() {
         const defaultConfig = await response.json()
 
         // Update only the prompt sections and language field
-        setEditingConfig(prev => {
+        setEditingConfig((prev) => {
           if (!prev) return prev
           return {
             ...prev,
@@ -247,14 +263,11 @@ export function StrategyStudioPage() {
   const handleDeleteStrategy = async (id: string) => {
     if (!token) return
 
-    const confirmed = await confirmToast(
-      tr('confirmDeleteStrategy'),
-      {
-        title: tr('confirmDelete'),
-        okText: tr('delete'),
-        cancelText: tr('cancel'),
-      }
-    )
+    const confirmed = await confirmToast(tr('confirmDeleteStrategy'), {
+      title: tr('confirmDelete'),
+      okText: tr('delete'),
+      cancelText: tr('cancel'),
+    })
     if (!confirmed) return
 
     try {
@@ -282,16 +295,19 @@ export function StrategyStudioPage() {
   const handleDuplicateStrategy = async (id: string) => {
     if (!token) return
     try {
-      const response = await fetch(`${API_BASE}/api/strategies/${id}/duplicate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: tr('strategyCopy'),
-        }),
-      })
+      const response = await fetch(
+        `${API_BASE}/api/strategies/${id}/duplicate`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: tr('strategyCopy'),
+          }),
+        }
+      )
       if (!response.ok) throw new Error('Failed to duplicate strategy')
       await fetchStrategies()
     } catch (err) {
@@ -303,10 +319,13 @@ export function StrategyStudioPage() {
   const handleActivateStrategy = async (id: string) => {
     if (!token) return
     try {
-      const response = await fetch(`${API_BASE}/api/strategies/${id}/activate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const response = await fetch(
+        `${API_BASE}/api/strategies/${id}/activate`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      )
       if (!response.ok) throw new Error('Failed to activate strategy')
       await fetchStrategies()
     } catch (err) {
@@ -323,7 +342,9 @@ export function StrategyStudioPage() {
       exported_at: new Date().toISOString(),
       version: '1.0',
     }
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json',
+    })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -336,7 +357,9 @@ export function StrategyStudioPage() {
   }
 
   // Import strategy from JSON file
-  const handleImportStrategy = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportStrategy = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
     const file = event.target.files?.[0]
     if (!file || !token) return
 
@@ -431,18 +454,21 @@ export function StrategyStudioPage() {
     if (!token || !editingConfig) return
     setIsLoadingPrompt(true)
     try {
-      const response = await fetch(`${API_BASE}/api/strategies/preview-prompt`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          config: editingConfig,
-          account_equity: 1000,
-          prompt_variant: selectedVariant,
-        }),
-      })
+      const response = await fetch(
+        `${API_BASE}/api/strategies/preview-prompt`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            config: editingConfig,
+            account_equity: 1000,
+            prompt_variant: selectedVariant,
+          }),
+        }
+      )
       if (!response.ok) throw new Error('Failed to fetch prompt preview')
       const data = await response.json()
       setPromptPreview(data)
@@ -566,6 +592,23 @@ export function StrategyStudioPage() {
       ),
     },
     {
+      key: 'reverseStrategy' as const,
+      icon: Shuffle,
+      color: '#60a5fa',
+      title: tr('reverseStrategy'),
+      forStrategyType: 'ai_trading' as const,
+      content: editingConfig && (
+        <ReverseStrategyEditor
+          config={editingConfig.reverse_strategy}
+          onChange={(reverseStrategy) =>
+            updateConfig('reverse_strategy', reverseStrategy)
+          }
+          disabled={selectedStrategy?.is_default}
+          language={language}
+        />
+      ),
+    },
+    {
       key: 'promptSections' as const,
       icon: FileText,
       color: '#a855f7',
@@ -574,7 +617,9 @@ export function StrategyStudioPage() {
       content: editingConfig && (
         <PromptSectionsEditor
           config={editingConfig.prompt_sections}
-          onChange={(promptSections) => updateConfig('prompt_sections', promptSections)}
+          onChange={(promptSections) =>
+            updateConfig('prompt_sections', promptSections)
+          }
           disabled={selectedStrategy?.is_default}
           language={language}
         />
@@ -597,7 +642,11 @@ export function StrategyStudioPage() {
             disabled={selectedStrategy?.is_default}
             placeholder={tr('customPromptPlaceholder')}
             className="w-full h-32 px-3 py-2 rounded-lg resize-none font-mono text-xs"
-            style={{ background: '#0B0E11', border: '1px solid #2B3139', color: '#EAECEF' }}
+            style={{
+              background: '#0B0E11',
+              border: '1px solid #2B3139',
+              color: '#EAECEF',
+            }}
           />
         </div>
       ),
@@ -625,13 +674,14 @@ export function StrategyStudioPage() {
         />
       ),
     },
-  ].filter(section =>
-    section.forStrategyType === 'both' || section.forStrategyType === currentStrategyType
+  ].filter(
+    (section) =>
+      section.forStrategyType === 'both' ||
+      section.forStrategyType === currentStrategyType
   )
 
   return (
-    <DeepVoidBackground className="h-[calc(100vh-64px)] flex flex-col bg-nofx-bg relative overflow-hidden">
-
+    <DeepVoidBackground className="h-[calc(100vh-64px)] min-h-0 flex flex-col bg-nofx-bg relative overflow-hidden">
       {/* Header */}
       {/* Header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-nofx-gold/20 bg-nofx-bg/60 backdrop-blur-md z-10">
@@ -641,29 +691,54 @@ export function StrategyStudioPage() {
               <Sparkles className="w-5 h-5 text-black" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-nofx-text">{tr('strategyStudio')}</h1>
+              <h1 className="text-lg font-bold text-nofx-text">
+                {tr('strategyStudio')}
+              </h1>
               <p className="text-xs text-nofx-text-muted">{tr('subtitle')}</p>
             </div>
           </div>
           {error && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs bg-nofx-danger/10 text-nofx-danger">
               {error}
-              <button onClick={() => setError(null)} className="hover:underline">×</button>
+              <button
+                onClick={() => setError(null)}
+                className="hover:underline"
+              >
+                ×
+              </button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Main Content - Three Columns */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content - Responsive Three Columns */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile overlay backdrop */}
+        {(showLeftPanel || showRightPanel) && (
+          <div
+            className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+            onClick={() => { setShowLeftPanel(false); setShowRightPanel(false) }}
+          />
+        )}
+
         {/* Left Column - Strategy List */}
-        <div className="w-48 flex-shrink-0 border-r border-nofx-gold/20 overflow-y-auto bg-nofx-bg/30 backdrop-blur-sm z-10">
+        <div className={`
+          w-48 flex-shrink-0 border-r border-nofx-gold/20 overflow-y-auto bg-nofx-bg backdrop-blur-sm
+          fixed inset-y-0 left-0 z-30 transition-transform duration-200
+          lg:relative lg:translate-x-0 lg:z-10
+          ${showLeftPanel ? 'translate-x-0' : '-translate-x-full'}
+        `}>
           <div className="p-2">
             <div className="flex items-center justify-between mb-2 px-2">
-              <span className="text-xs font-medium text-nofx-text-muted">{tr('strategies')}</span>
+              <span className="text-xs font-medium text-nofx-text-muted">
+                {tr('strategies')}
+              </span>
               <div className="flex items-center gap-1">
                 {/* Import button with hidden file input */}
-                <label className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer text-nofx-text-muted hover:text-white" title={tr('importStrategy')}>
+                <label
+                  className="p-1 rounded hover:bg-white/10 transition-colors cursor-pointer text-nofx-text-muted hover:text-white"
+                  title={tr('importStrategy')}
+                >
                   <Upload className="w-4 h-4" />
                   <input
                     type="file"
@@ -691,17 +766,24 @@ export function StrategyStudioPage() {
                     setHasChanges(false)
                     setPromptPreview(null)
                     setAiTestResult(null)
+                    setShowLeftPanel(false)
                   }}
-                  className={`group px-2 py-2 rounded-lg cursor-pointer transition-all ${selectedStrategy?.id === strategy.id
-                    ? 'ring-1 ring-nofx-gold/50 bg-nofx-gold/10 shadow-[0_0_15px_rgba(240,185,11,0.1)]'
-                    : 'hover:bg-nofx-bg-lighter/60 hover:ring-1 hover:ring-nofx-gold/20 bg-transparent'
-                    }`}
+                  className={`group px-2 py-2 rounded-lg cursor-pointer transition-all ${
+                    selectedStrategy?.id === strategy.id
+                      ? 'ring-1 ring-nofx-gold/50 bg-nofx-gold/10 shadow-[0_0_15px_rgba(240,185,11,0.1)]'
+                      : 'hover:bg-nofx-bg-lighter/60 hover:ring-1 hover:ring-nofx-gold/20 bg-transparent'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm truncate text-nofx-text">{strategy.name}</span>
+                    <span className="text-sm truncate text-nofx-text">
+                      {strategy.name}
+                    </span>
                     <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleExportStrategy(strategy) }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleExportStrategy(strategy)
+                        }}
                         className="p-1 rounded hover:bg-white/10 text-nofx-text-muted hover:text-white"
                         title={tr('export')}
                       >
@@ -710,14 +792,20 @@ export function StrategyStudioPage() {
                       {!strategy.is_default && (
                         <>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDuplicateStrategy(strategy.id) }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDuplicateStrategy(strategy.id)
+                            }}
                             className="p-1 rounded hover:bg-white/10 text-nofx-text-muted hover:text-white"
                             title={tr('duplicate')}
                           >
                             <Copy className="w-3 h-3" />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteStrategy(strategy.id) }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteStrategy(strategy.id)
+                            }}
                             className="p-1 rounded hover:bg-nofx-danger/20 text-nofx-danger"
                             title={tr('deleteTooltip')}
                           >
@@ -752,7 +840,28 @@ export function StrategyStudioPage() {
         </div>
 
         {/* Middle Column - Config Editor */}
-        <div className="flex-1 min-w-0 overflow-y-auto border-r border-nofx-gold/20">
+        <div className="flex-1 min-w-0 overflow-y-auto border-r border-nofx-gold/20 bg-nofx-bg">
+          {/* Mobile toolbar */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-nofx-gold/10 lg:hidden">
+            <button
+              onClick={() => setShowLeftPanel(true)}
+              className="p-1.5 rounded-lg bg-nofx-bg-lighter border border-nofx-gold/20 text-nofx-text-muted hover:text-nofx-gold transition-colors"
+              title={tr('strategies')}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-nofx-text-muted flex-1 truncate">
+              {selectedStrategy?.name || tr('selectOrCreate')}
+            </span>
+            <button
+              onClick={() => setShowRightPanel(true)}
+              className="p-1.5 rounded-lg bg-nofx-bg-lighter border border-nofx-gold/20 text-nofx-text-muted hover:text-nofx-gold transition-colors"
+              title={tr('promptPreview')}
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          </div>
+
           {selectedStrategy && editingConfig ? (
             <div className="p-4">
               {/* Strategy Name & Actions */}
@@ -762,7 +871,10 @@ export function StrategyStudioPage() {
                     type="text"
                     value={selectedStrategy.name}
                     onChange={(e) => {
-                      setSelectedStrategy({ ...selectedStrategy, name: e.target.value })
+                      setSelectedStrategy({
+                        ...selectedStrategy,
+                        name: e.target.value,
+                      })
                       setHasChanges(true)
                     }}
                     disabled={selectedStrategy.is_default}
@@ -772,7 +884,10 @@ export function StrategyStudioPage() {
                     type="text"
                     value={selectedStrategy.description || ''}
                     onChange={(e) => {
-                      setSelectedStrategy({ ...selectedStrategy, description: e.target.value })
+                      setSelectedStrategy({
+                        ...selectedStrategy,
+                        description: e.target.value,
+                      })
                       setHasChanges(true)
                     }}
                     disabled={selectedStrategy.is_default}
@@ -780,13 +895,17 @@ export function StrategyStudioPage() {
                     className="text-xs bg-transparent border-none outline-none w-full text-nofx-text-muted placeholder-nofx-text-muted/50 mt-1"
                   />
                   {hasChanges && (
-                    <span className="text-xs text-nofx-gold">● {tr('unsaved')}</span>
+                    <span className="text-xs text-nofx-gold">
+                      ● {tr('unsaved')}
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {!selectedStrategy.is_active && (
                     <button
-                      onClick={() => handleActivateStrategy(selectedStrategy.id)}
+                      onClick={() =>
+                        handleActivateStrategy(selectedStrategy.id)
+                      }
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors bg-nofx-success/10 border border-nofx-success/30 text-nofx-success hover:bg-nofx-success/20"
                     >
                       <Check className="w-3 h-3" />
@@ -812,7 +931,9 @@ export function StrategyStudioPage() {
                 <div className="mb-4 p-4 rounded-lg bg-nofx-bg-lighter border border-nofx-gold/20">
                   <div className="flex items-center gap-2 mb-3">
                     <Zap className="w-4 h-4" style={{ color: '#F0B90B' }} />
-                    <span className="text-sm font-medium text-nofx-text">{tr('strategyType')}</span>
+                    <span className="text-sm font-medium text-nofx-text">
+                      {tr('strategyType')}
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <button
@@ -825,16 +946,21 @@ export function StrategyStudioPage() {
                       }}
                       disabled={selectedStrategy?.is_default}
                       className={`p-3 rounded-lg border transition-all ${
-                        (!editingConfig.strategy_type || editingConfig.strategy_type === 'ai_trading')
+                        !editingConfig.strategy_type ||
+                        editingConfig.strategy_type === 'ai_trading'
                           ? 'border-nofx-gold bg-nofx-gold/10'
                           : 'border-nofx-border hover:border-nofx-gold/50'
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-1">
                         <Bot className="w-4 h-4" style={{ color: '#F0B90B' }} />
-                        <span className="text-sm font-medium text-nofx-text">{tr('aiTrading')}</span>
+                        <span className="text-sm font-medium text-nofx-text">
+                          {tr('aiTrading')}
+                        </span>
                       </div>
-                      <p className="text-xs text-nofx-text-muted text-left">{tr('aiTradingDesc')}</p>
+                      <p className="text-xs text-nofx-text-muted text-left">
+                        {tr('aiTradingDesc')}
+                      </p>
                     </button>
                     <button
                       onClick={() => {
@@ -854,10 +980,17 @@ export function StrategyStudioPage() {
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        <Activity className="w-4 h-4" style={{ color: '#0ECB81' }} />
-                        <span className="text-sm font-medium text-nofx-text">{tr('gridTrading')}</span>
+                        <Activity
+                          className="w-4 h-4"
+                          style={{ color: '#0ECB81' }}
+                        />
+                        <span className="text-sm font-medium text-nofx-text">
+                          {tr('gridTrading')}
+                        </span>
                       </div>
-                      <p className="text-xs text-nofx-text-muted text-left">{tr('gridTradingDesc')}</p>
+                      <p className="text-xs text-nofx-text-muted text-left">
+                        {tr('gridTradingDesc')}
+                      </p>
                     </button>
                   </div>
                 </div>
@@ -865,32 +998,34 @@ export function StrategyStudioPage() {
 
               {/* Config Sections */}
               <div className="space-y-2">
-                {configSections.map(({ key, icon: Icon, color, title, content }) => (
-                  <div
-                    key={key}
-                    className="rounded-lg overflow-hidden bg-nofx-bg-lighter border border-nofx-gold/20"
-                  >
-                    <button
-                      onClick={() => toggleSection(key)}
-                      className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/5 transition-colors"
+                {configSections.map(
+                  ({ key, icon: Icon, color, title, content }) => (
+                    <div
+                      key={key}
+                      className="rounded-lg overflow-hidden bg-nofx-bg-lighter border border-nofx-gold/20"
                     >
-                      <div className="flex items-center gap-2">
-                        <Icon className="w-4 h-4" style={{ color }} />
-                        <span className="text-sm font-medium text-nofx-text">{title}</span>
-                      </div>
-                      {expandedSections[key] ? (
-                        <ChevronDown className="w-4 h-4 text-nofx-text-muted" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-nofx-text-muted" />
+                      <button
+                        onClick={() => toggleSection(key)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/5 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="w-4 h-4" style={{ color }} />
+                          <span className="text-sm font-medium text-nofx-text">
+                            {title}
+                          </span>
+                        </div>
+                        {expandedSections[key] ? (
+                          <ChevronDown className="w-4 h-4 text-nofx-text-muted" />
+                        ) : (
+                          <ChevronRight className="w-4 h-4 text-nofx-text-muted" />
+                        )}
+                      </button>
+                      {expandedSections[key] && (
+                        <div className="px-3 pb-3">{content}</div>
                       )}
-                    </button>
-                    {expandedSections[key] && (
-                      <div className="px-3 pb-3">
-                        {content}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  )
+                )}
               </div>
             </div>
           ) : (
@@ -906,21 +1041,38 @@ export function StrategyStudioPage() {
         </div>
 
         {/* Right Column - Prompt Preview & AI Test */}
-        <div className="w-[420px] flex-shrink-0 flex flex-col overflow-hidden">
+        <div className={`
+          w-[420px] flex-shrink-0 flex flex-col overflow-hidden
+          fixed inset-y-0 right-0 z-30 bg-nofx-bg transition-transform duration-200
+          lg:relative lg:translate-x-0 lg:z-0 lg:bg-transparent
+          ${showRightPanel ? 'translate-x-0' : 'translate-x-full'}
+        `}>
           {/* Tabs */}
           <div className="flex-shrink-0 flex border-b border-nofx-gold/20">
             <button
+              onClick={() => setShowRightPanel(false)}
+              className="px-2 py-2.5 text-nofx-text-muted hover:text-nofx-gold transition-colors lg:hidden"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+            <button
               onClick={() => setActiveRightTab('prompt')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${activeRightTab === 'prompt' ? 'border-b-2 border-purple-500 text-purple-500' : 'opacity-60 hover:opacity-100 text-nofx-text-muted'
-                }`}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                activeRightTab === 'prompt'
+                  ? 'border-b-2 border-purple-500 text-purple-500'
+                  : 'opacity-60 hover:opacity-100 text-nofx-text-muted'
+              }`}
             >
               <Eye className="w-4 h-4" />
               {tr('promptPreview')}
             </button>
             <button
               onClick={() => setActiveRightTab('test')}
-              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${activeRightTab === 'test' ? 'border-b-2 border-green-500 text-green-500' : 'opacity-60 hover:opacity-100 text-nofx-text-muted'
-                }`}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+                activeRightTab === 'test'
+                  ? 'border-b-2 border-green-500 text-green-500'
+                  : 'opacity-60 hover:opacity-100 text-nofx-text-muted'
+              }`}
             >
               <Play className="w-4 h-4" />
               {tr('aiTestRun')}
@@ -948,7 +1100,11 @@ export function StrategyStudioPage() {
                     disabled={isLoadingPrompt || !editingConfig}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50 bg-purple-600 hover:bg-purple-700 text-white"
                   >
-                    {isLoadingPrompt ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {isLoadingPrompt ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
                     {promptPreview ? tr('refreshPrompt') : tr('loadPrompt')}
                   </button>
                 </div>
@@ -959,15 +1115,23 @@ export function StrategyStudioPage() {
                     <div className="p-2 rounded-lg bg-nofx-bg border border-nofx-gold/20">
                       <div className="flex items-center gap-1.5 mb-2">
                         <Code className="w-3 h-3 text-purple-500" />
-                        <span className="text-xs font-medium text-purple-500">Config</span>
+                        <span className="text-xs font-medium text-purple-500">
+                          Config
+                        </span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-xs">
-                        {Object.entries(promptPreview.config_summary || {}).map(([key, value]) => (
-                          <div key={key}>
-                            <div className="text-nofx-text-muted">{key.replace(/_/g, ' ')}</div>
-                            <div className="text-nofx-text">{String(value)}</div>
-                          </div>
-                        ))}
+                        {Object.entries(promptPreview.config_summary || {}).map(
+                          ([key, value]) => (
+                            <div key={key}>
+                              <div className="text-nofx-text-muted">
+                                {key.replace(/_/g, ' ')}
+                              </div>
+                              <div className="text-nofx-text">
+                                {String(value)}
+                              </div>
+                            </div>
+                          )
+                        )}
                       </div>
                     </div>
 
@@ -976,10 +1140,13 @@ export function StrategyStudioPage() {
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-1.5">
                           <FileText className="w-3 h-3 text-purple-500" />
-                          <span className="text-xs font-medium text-nofx-text">{tr('systemPrompt')}</span>
+                          <span className="text-xs font-medium text-nofx-text">
+                            {tr('systemPrompt')}
+                          </span>
                         </div>
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-nofx-bg-lighter text-nofx-text-muted">
-                          {promptPreview.system_prompt.length.toLocaleString()} chars
+                          {promptPreview.system_prompt.length.toLocaleString()}{' '}
+                          chars
                         </span>
                       </div>
                       <pre
@@ -1004,7 +1171,9 @@ export function StrategyStudioPage() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <Bot className="w-4 h-4 text-green-500" />
-                    <span className="text-xs font-medium text-nofx-text">{tr('selectModel')}</span>
+                    <span className="text-xs font-medium text-nofx-text">
+                      {tr('selectModel')}
+                    </span>
                   </div>
                   {aiModels.length > 0 ? (
                     <select
@@ -1036,7 +1205,9 @@ export function StrategyStudioPage() {
                     </select>
                     <button
                       onClick={runAiTest}
-                      disabled={isRunningAiTest || !editingConfig || !selectedModelId}
+                      disabled={
+                        isRunningAiTest || !editingConfig || !selectedModelId
+                      }
                       className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 text-white shadow-lg shadow-green-500/20 bg-gradient-to-br from-green-500 to-green-600"
                     >
                       {isRunningAiTest ? (
@@ -1052,7 +1223,9 @@ export function StrategyStudioPage() {
                       )}
                     </button>
                   </div>
-                  <p className="text-[10px] text-nofx-text-muted">{tr('testNote')}</p>
+                  <p className="text-[10px] text-nofx-text-muted">
+                    {tr('testNote')}
+                  </p>
                 </div>
 
                 {/* Test Results */}
@@ -1060,7 +1233,9 @@ export function StrategyStudioPage() {
                   <div className="space-y-3">
                     {aiTestResult.error ? (
                       <div className="p-3 rounded-lg bg-nofx-danger/10 border border-nofx-danger/30">
-                        <p className="text-sm text-nofx-danger">{aiTestResult.error}</p>
+                        <p className="text-sm text-nofx-danger">
+                          {aiTestResult.error}
+                        </p>
                       </div>
                     ) : (
                       <>
@@ -1068,7 +1243,8 @@ export function StrategyStudioPage() {
                           <div className="flex items-center gap-2">
                             <Clock className="w-3 h-3 text-nofx-text-muted" />
                             <span className="text-xs text-nofx-text-muted">
-                              {tr('duration')}: {(aiTestResult.duration_ms / 1000).toFixed(2)}s
+                              {tr('duration')}:{' '}
+                              {(aiTestResult.duration_ms / 1000).toFixed(2)}s
                             </span>
                           </div>
                         )}
@@ -1078,7 +1254,9 @@ export function StrategyStudioPage() {
                           <div>
                             <div className="flex items-center gap-1.5 mb-1.5">
                               <Terminal className="w-3 h-3 text-blue-400" />
-                              <span className="text-xs font-medium text-nofx-text">{tr('userPrompt')} (Input)</span>
+                              <span className="text-xs font-medium text-nofx-text">
+                                {tr('userPrompt')} (Input)
+                              </span>
                             </div>
                             <pre
                               className="p-2 rounded-lg text-[10px] font-mono overflow-auto bg-nofx-bg border border-nofx-gold/20 text-nofx-text"
@@ -1094,7 +1272,9 @@ export function StrategyStudioPage() {
                           <div>
                             <div className="flex items-center gap-1.5 mb-1.5">
                               <Sparkles className="w-3 h-3 text-nofx-gold" />
-                              <span className="text-xs font-medium text-nofx-text">{tr('reasoning')}</span>
+                              <span className="text-xs font-medium text-nofx-text">
+                                {tr('reasoning')}
+                              </span>
                             </div>
                             <pre
                               className="p-2 rounded-lg text-[10px] font-mono overflow-auto whitespace-pre-wrap bg-nofx-bg border border-nofx-gold/30 text-nofx-text"
@@ -1106,27 +1286,36 @@ export function StrategyStudioPage() {
                         )}
 
                         {/* AI Decisions */}
-                        {aiTestResult.decisions && aiTestResult.decisions.length > 0 && (
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-1.5">
-                              <Activity className="w-3 h-3 text-green-500" />
-                              <span className="text-xs font-medium text-nofx-text">{tr('decisions')}</span>
+                        {aiTestResult.decisions &&
+                          aiTestResult.decisions.length > 0 && (
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <Activity className="w-3 h-3 text-green-500" />
+                                <span className="text-xs font-medium text-nofx-text">
+                                  {tr('decisions')}
+                                </span>
+                              </div>
+                              <pre
+                                className="p-2 rounded-lg text-[10px] font-mono overflow-auto bg-nofx-bg border border-green-500/30 text-nofx-text"
+                                style={{ maxHeight: '200px' }}
+                              >
+                                {JSON.stringify(
+                                  aiTestResult.decisions,
+                                  null,
+                                  2
+                                )}
+                              </pre>
                             </div>
-                            <pre
-                              className="p-2 rounded-lg text-[10px] font-mono overflow-auto bg-nofx-bg border border-green-500/30 text-nofx-text"
-                              style={{ maxHeight: '200px' }}
-                            >
-                              {JSON.stringify(aiTestResult.decisions, null, 2)}
-                            </pre>
-                          </div>
-                        )}
+                          )}
 
                         {/* Raw AI Response */}
                         {aiTestResult.ai_response && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-1.5">
                               <FileText className="w-3 h-3 text-nofx-text-muted" />
-                              <span className="text-xs font-medium text-nofx-text">{tr('aiOutput')} (Raw)</span>
+                              <span className="text-xs font-medium text-nofx-text">
+                                {tr('aiOutput')} (Raw)
+                              </span>
                             </div>
                             <pre
                               className="p-2 rounded-lg text-[10px] font-mono overflow-auto whitespace-pre-wrap bg-nofx-bg border border-nofx-gold/20 text-nofx-text"

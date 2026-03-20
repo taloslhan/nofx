@@ -541,6 +541,64 @@ export const riskControl = {
 }
 
 // ============================================================================
+// REVERSE STRATEGY TRANSLATIONS
+// ============================================================================
+export const reverseStrategy = {
+  enabled: {
+    zh: '启用反向策略',
+    en: 'Enable Reverse Strategy',
+    es: 'Habilitar Estrategia Inversa',
+  },
+  enabledDesc: {
+    zh: '仅反转开仓方向，平仓与等待类决策保持原样',
+    en: 'Reverse only entry actions while leaving exits and wait actions unchanged',
+    es: 'Invierte solo las entradas; salidas y esperas se mantienen igual',
+  },
+  swapSlTp: {
+    zh: '反转时互换止损止盈',
+    en: 'Swap Stop-Loss / Take-Profit',
+    es: 'Intercambiar Stop Loss / Take Profit',
+  },
+  swapSlTpDesc: {
+    zh: 'open_long ↔ open_short 时交换原始 SL/TP',
+    en: 'Swap the original SL/TP when reversing open_long/open_short',
+    es: 'Intercambia el SL/TP original al invertir open_long/open_short',
+  },
+  swapOn: { zh: '已启用', en: 'Enabled', es: 'Activado' },
+  swapOff: { zh: '已关闭', en: 'Disabled', es: 'Desactivado' },
+  leverageScale: {
+    zh: '杠杆缩放',
+    en: 'Leverage Scale',
+    es: 'Escala de Apalancamiento',
+  },
+  leverageScaleDesc: {
+    zh: '对反向开仓的杠杆倍数做乘法缩放',
+    en: 'Multiply leverage for reversed entry orders',
+    es: 'Multiplica el apalancamiento de entradas invertidas',
+  },
+  positionScale: {
+    zh: '仓位缩放',
+    en: 'Position Scale',
+    es: 'Escala de Posición',
+  },
+  positionScaleDesc: {
+    zh: '对反向开仓的仓位金额做乘法缩放',
+    en: 'Multiply position size for reversed entry orders',
+    es: 'Multiplica el tamaño de posición de entradas invertidas',
+  },
+  minRiskRewardRatio: {
+    zh: '反向最小 R:R',
+    en: 'Reverse Min R:R',
+    es: 'R:R Mínimo Inverso',
+  },
+  minRiskRewardRatioDesc: {
+    zh: '反向开仓单独使用的最小风险回报比，避免被全局 3:1 规则拦截',
+    en: 'Minimum risk/reward ratio used only for reversed entries',
+    es: 'Ratio riesgo/recompensa mínimo usado solo para entradas invertidas',
+  },
+}
+
+// ============================================================================
 // PROMPT SECTIONS TRANSLATIONS (12+ keys)
 // ============================================================================
 export const promptSections = {

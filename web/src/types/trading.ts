@@ -76,6 +76,8 @@ export interface DecisionRecord {
   input_prompt: string
   cot_trace: string
   decision_json: string
+  original_decision_json?: string
+  transform_applied?: string
   account_state: AccountSnapshot
   positions: any[]
   candidate_coins: string[]

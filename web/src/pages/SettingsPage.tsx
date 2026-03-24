@@ -174,22 +174,6 @@ export function SettingsPage() {
           error: 'Failed to save model config',
         })
       }
-
-      const request = {
-        models: Object.fromEntries(
-          updatedModels.map((m) => [
-            m.provider,
-            {
-              enabled: m.enabled,
-              api_key: m.apiKey || '',
-              custom_api_url: m.customApiUrl || '',
-              custom_model_name: m.customModelName || '',
-            },
-          ])
-        ),
-      }
-      await api.updateModelConfigs(request)
-      toast.success('Model config saved')
       const refreshed = await api.getModelConfigs()
       setConfiguredModels(refreshed)
       setShowModelModal(false)

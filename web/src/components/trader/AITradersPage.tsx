@@ -377,14 +377,8 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     if (!ok) return
 
     try {
-      const updatedItems =
-        config.allItems?.map((item) =>
-          item.id === config.id ? config.clearFields(item) : item
-        ) || []
-
-      const request = config.buildRequest(updatedItems)
-      await config.updateApi(request)
-      toast.success(t('aiTradersToast.configUpdated', language))
+      await api.deleteAIModel(modelId)
+      toast.success(t('aiTradersToast.deleted', language))
 
       const refreshedModels = await api.getModelConfigs()
       setAllModels([...refreshedModels])
@@ -431,7 +425,20 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           },
         }
 
-      await api.updateModelConfigs(request)
+        await api.updateModelConfigs(request)
+      } else {
+        const request = {
+          provider: targetModel.provider,
+          name: requestName,
+          enabled: true,
+          api_key: apiKey,
+          custom_api_url: customApiUrl || '',
+          custom_model_name: customModelName || '',
+        }
+
+        await api.createAIModel(request)
+      }
+
       toast.success(t('aiTradersToast.modelConfigUpdated', language))
 
       const refreshedModels = await api.getModelConfigs()

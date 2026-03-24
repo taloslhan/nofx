@@ -210,7 +210,6 @@ export function ModelConfigModal({
             (selectedModel.provider === 'claw402' ||
               selectedModel.id === 'claw402') && (
               <Claw402ConfigForm
-                provider={selectedModel.provider}
                 displayName={displayName}
                 apiKey={apiKey}
                 modelName={modelName}
@@ -218,7 +217,6 @@ export function ModelConfigModal({
                 onDisplayNameChange={setDisplayName}
                 onApiKeyChange={setApiKey}
                 onModelNameChange={setModelName}
-                onTestConnection={onTestConnection}
                 onBack={handleBack}
                 onSubmit={handleSubmit}
                 language={language}
@@ -436,7 +434,7 @@ function ModelSelectionStep({
             model={model}
             selected={selectedModelId === model.id}
             onClick={() => onSelectModel(model.id)}
-            configured={configuredIds.has(model.id)}
+            configuredCount={configuredCountByProvider[model.provider || model.id] || 0}
           />
         ))}
       </div>
@@ -448,7 +446,6 @@ function ModelSelectionStep({
 }
 
 function Claw402ConfigForm({
-  provider,
   displayName,
   apiKey,
   modelName,
@@ -456,12 +453,10 @@ function Claw402ConfigForm({
   onDisplayNameChange,
   onApiKeyChange,
   onModelNameChange,
-  onTestConnection,
   onBack,
   onSubmit,
   language,
 }: {
-  provider: string
   displayName: string
   apiKey: string
   modelName: string
@@ -469,12 +464,6 @@ function Claw402ConfigForm({
   onDisplayNameChange: (value: string) => void
   onApiKeyChange: (value: string) => void
   onModelNameChange: (value: string) => void
-  onTestConnection: (
-    provider: string,
-    apiKey: string,
-    baseUrl?: string,
-    modelName?: string
-  ) => Promise<TestModelConnectionResponse>
   onBack: () => void
   onSubmit: (e: React.FormEvent) => void
   language: Language
@@ -1021,11 +1010,6 @@ function Claw402ConfigForm({
       </div>
 
       {/* Buttons */}
-      <ConnectionTestFeedback
-        state={{ status: testStatus, result: testResult }}
-        language={language}
-      />
-
       <div className="flex gap-3 pt-2">
         <button
           type="button"
@@ -1040,7 +1024,7 @@ function Claw402ConfigForm({
         <button
           type="button"
           onClick={handleTestConnection}
-          disabled={!apiKey.trim() || testStatus === 'testing'}
+          disabled={!apiKey.trim() || testing}
           className="flex-1 px-4 py-3 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           style={{
             background: '#0B0E11',
@@ -1048,7 +1032,7 @@ function Claw402ConfigForm({
             color: '#EAECEF',
           }}
         >
-          {testStatus === 'testing'
+          {testing
             ? t('testingConnection', language)
             : t('testConnection', language)}
         </button>

@@ -2,6 +2,8 @@ import { Repeat, Scale, ShieldAlert, ToggleLeft } from 'lucide-react'
 import type { ReverseStrategyConfig } from '../../types'
 import { reverseStrategy, ts } from '../../i18n/strategy-translations'
 
+type SLTPMode = NonNullable<ReverseStrategyConfig['sltp_mode']>
+
 interface ReverseStrategyEditorProps {
   config?: ReverseStrategyConfig
   onChange: (config: ReverseStrategyConfig) => void
@@ -11,10 +13,20 @@ interface ReverseStrategyEditorProps {
 
 const defaultReverseStrategyConfig: ReverseStrategyConfig = {
   enabled: false,
-  swap_sl_tp: true,
+  sltp_mode: 'recalculate',
   leverage_scale: 1,
   position_scale: 1,
   min_risk_reward_ratio: 0.5,
+}
+
+function resolveSLTPMode(config?: ReverseStrategyConfig): SLTPMode {
+  if (config?.sltp_mode) {
+    return config.sltp_mode
+  }
+  if (typeof config?.swap_sl_tp === 'boolean') {
+    return config.swap_sl_tp ? 'swap' : 'none'
+  }
+  return 'recalculate'
 }
 
 export function ReverseStrategyEditor({
@@ -23,7 +35,11 @@ export function ReverseStrategyEditor({
   disabled,
   language,
 }: ReverseStrategyEditorProps) {
-  const merged = { ...defaultReverseStrategyConfig, ...config }
+  const merged = {
+    ...defaultReverseStrategyConfig,
+    ...config,
+    sltp_mode: resolveSLTPMode(config),
+  }
 
   const updateField = <K extends keyof ReverseStrategyConfig>(
     key: K,
@@ -38,6 +54,38 @@ export function ReverseStrategyEditor({
     const parsed = Number.parseFloat(value)
     return Number.isFinite(parsed) ? parsed : fallback
   }
+
+  const updateSLTPMode = (mode: SLTPMode) => {
+    if (!disabled) {
+      onChange({
+        ...merged,
+        sltp_mode: mode,
+        swap_sl_tp: mode === 'swap',
+      })
+    }
+  }
+
+  const modeOptions: Array<{
+    value: SLTPMode
+    title: typeof reverseStrategy.modeSwapTitle
+    description: typeof reverseStrategy.modeSwapDesc
+  }> = [
+    {
+      value: 'recalculate',
+      title: reverseStrategy.modeRecalculateTitle,
+      description: reverseStrategy.modeRecalculateDesc,
+    },
+    {
+      value: 'swap',
+      title: reverseStrategy.modeSwapTitle,
+      description: reverseStrategy.modeSwapDesc,
+    },
+    {
+      value: 'none',
+      title: reverseStrategy.modeNoneTitle,
+      description: reverseStrategy.modeNoneDesc,
+    },
+  ]
 
   return (
     <div className="space-y-6">
@@ -93,26 +141,41 @@ export function ReverseStrategyEditor({
           <div className="flex items-center gap-2 mb-2">
             <ToggleLeft className="w-4 h-4" style={{ color: '#F0B90B' }} />
             <label className="text-sm font-medium" style={{ color: '#EAECEF' }}>
-              {ts(reverseStrategy.swapSlTp, language)}
+              {ts(reverseStrategy.sltpMode, language)}
             </label>
           </div>
           <p className="text-xs mb-3" style={{ color: '#848E9C' }}>
-            {ts(reverseStrategy.swapSlTpDesc, language)}
+            {ts(reverseStrategy.sltpModeDesc, language)}
           </p>
-          <label className="inline-flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={merged.swap_sl_tp ?? true}
-              onChange={(e) => updateField('swap_sl_tp', e.target.checked)}
-              disabled={disabled || !merged.enabled}
-              className="accent-yellow-500"
-            />
-            <span className="text-sm" style={{ color: '#EAECEF' }}>
-              {merged.swap_sl_tp
-                ? ts(reverseStrategy.swapOn, language)
-                : ts(reverseStrategy.swapOff, language)}
-            </span>
-          </label>
+          <div className="space-y-2">
+            {modeOptions.map((option) => {
+              const isSelected = merged.sltp_mode === option.value
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => updateSLTPMode(option.value)}
+                  disabled={disabled || !merged.enabled}
+                  className="w-full rounded-lg px-3 py-3 text-left transition-colors"
+                  style={{
+                    background: isSelected ? '#1E2A3A' : '#1E2329',
+                    border: `1px solid ${isSelected ? '#60a5fa' : '#2B3139'}`,
+                    opacity: disabled || !merged.enabled ? 0.5 : 1,
+                  }}
+                >
+                  <div
+                    className="text-sm font-medium"
+                    style={{ color: '#EAECEF' }}
+                  >
+                    {ts(option.title, language)}
+                  </div>
+                  <div className="text-xs mt-1" style={{ color: '#848E9C' }}>
+                    {ts(option.description, language)}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         <div

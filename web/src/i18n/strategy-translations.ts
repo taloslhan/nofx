@@ -554,6 +554,46 @@ export const reverseStrategy = {
     en: 'Reverse only entry actions while leaving exits and wait actions unchanged',
     es: 'Invierte solo las entradas; salidas y esperas se mantienen igual',
   },
+  sltpMode: {
+    zh: '反向 SL/TP 模式',
+    en: 'Reverse SL/TP Mode',
+    es: 'Modo SL/TP Inverso',
+  },
+  sltpModeDesc: {
+    zh: '选择反向开仓后如何处理止损止盈；新策略默认使用智能镜像重算',
+    en: 'Choose how reversed entries handle stop loss and take profit',
+    es: 'Elige cómo manejar SL/TP en entradas invertidas',
+  },
+  modeSwapTitle: {
+    zh: '互换 SL/TP',
+    en: 'Swap SL/TP',
+    es: 'Intercambiar SL/TP',
+  },
+  modeSwapDesc: {
+    zh: '保留旧行为，直接交换原始止损和止盈',
+    en: 'Legacy behavior that directly swaps the original SL and TP',
+    es: 'Comportamiento heredado que intercambia SL y TP',
+  },
+  modeRecalculateTitle: {
+    zh: '镜像重算',
+    en: 'Mirror Recalculate',
+    es: 'Recalcular en Espejo',
+  },
+  modeRecalculateDesc: {
+    zh: '保留原始 SL/TP，并在下单前围绕实时价格做镜像重算',
+    en: 'Preserve original SL/TP and mirror them around live price before execution',
+    es: 'Conserva el SL/TP original y lo recalcula antes de ejecutar',
+  },
+  modeNoneTitle: {
+    zh: '保持不变',
+    en: 'Leave Unchanged',
+    es: 'Sin Cambios',
+  },
+  modeNoneDesc: {
+    zh: '只反转方向，不调整止损止盈',
+    en: 'Reverse direction only and leave SL/TP untouched',
+    es: 'Invierte solo la dirección y deja SL/TP intacto',
+  },
   swapSlTp: {
     zh: '反转时互换止损止盈',
     en: 'Swap Stop-Loss / Take-Profit',

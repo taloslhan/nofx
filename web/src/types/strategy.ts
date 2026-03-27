@@ -92,6 +92,7 @@ export interface GridStrategyConfig {
 export interface ReverseStrategyConfig {
   enabled?: boolean
   swap_sl_tp?: boolean
+  sltp_mode?: 'swap' | 'recalculate' | 'none'
   leverage_scale?: number
   position_scale?: number
   min_risk_reward_ratio?: number

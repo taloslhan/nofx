@@ -286,10 +286,11 @@ func (at *AutoTrader) runCycle() error {
 	}
 
 	// 8. Sort decisions: ensure close positions first, then open positions (prevent position stacking overflow)
-	sortedDecisions := sortDecisionsByPriority(aiDecision.Decisions)
+	executionOrder := sortDecisionIndexesByPriority(aiDecision.Decisions)
 
 	logger.Info("🔄 Execution order (optimized): Close positions first → Open positions later")
-	for i, d := range sortedDecisions {
+	for i, idx := range executionOrder {
+		d := aiDecision.Decisions[idx]
 		logger.Infof("  [%d] %s %s", i+1, d.Symbol, d.Action)
 	}
 	logger.Info()
@@ -305,22 +306,24 @@ func (at *AutoTrader) runCycle() error {
 
 	// Safe mode: filter out open positions, only allow close/hold
 	if at.safeMode {
-		filtered := make([]kernel.Decision, 0)
-		for _, d := range sortedDecisions {
+		filtered := make([]int, 0, len(executionOrder))
+		for _, idx := range executionOrder {
+			d := aiDecision.Decisions[idx]
 			if d.Action == "open_long" || d.Action == "open_short" {
 				logger.Warnf("🛡️ [%s] Safe mode: BLOCKED %s %s (no new positions allowed)", at.name, d.Action, d.Symbol)
 				continue
 			}
-			filtered = append(filtered, d)
+			filtered = append(filtered, idx)
 		}
-		sortedDecisions = filtered
-		if len(sortedDecisions) == 0 {
+		executionOrder = filtered
+		if len(executionOrder) == 0 {
 			logger.Infof("🛡️ [%s] Safe mode: all decisions were open positions, nothing to execute", at.name)
 		}
 	}
 
 	// Execute decisions and record results
-	for _, d := range sortedDecisions {
+	for _, idx := range executionOrder {
+		d := &aiDecision.Decisions[idx]
 		// Check if trader is stopped before each decision (allow immediate stop during execution)
 		at.isRunningMutex.RLock()
 		running = at.isRunning
@@ -344,7 +347,9 @@ func (at *AutoTrader) runCycle() error {
 			Success:    false,
 		}
 
-		if err := at.executeDecisionWithRecord(&d, &actionRecord); err != nil {
+		err := at.executeDecisionWithRecord(d, &actionRecord)
+		syncActionRecordRiskTargets(&actionRecord, d)
+		if err != nil {
 			logger.Infof("❌ Failed to execute decision (%s %s): %v", d.Symbol, d.Action, err)
 			actionRecord.Error = err.Error()
 			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("❌ %s %s failed: %v", d.Symbol, d.Action, err))
@@ -356,6 +361,10 @@ func (at *AutoTrader) runCycle() error {
 		}
 
 		record.Decisions = append(record.Decisions, actionRecord)
+	}
+	if len(aiDecision.Decisions) > 0 {
+		decisionJSON, _ := json.MarshalIndent(aiDecision.Decisions, "", "  ")
+		record.DecisionJSON = string(decisionJSON)
 	}
 
 	// 9. Save decision record
@@ -672,11 +681,23 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 	return ctx, nil
 }
 
-// sortDecisionsByPriority sorts decisions: close positions first, then open positions, finally hold/wait
-// This avoids position stacking overflow when changing positions
-func sortDecisionsByPriority(decisions []kernel.Decision) []kernel.Decision {
+func syncActionRecordRiskTargets(actionRecord *store.DecisionAction, decision *kernel.Decision) {
+	if actionRecord == nil || decision == nil {
+		return
+	}
+	actionRecord.StopLoss = decision.StopLoss
+	actionRecord.TakeProfit = decision.TakeProfit
+}
+
+// sortDecisionIndexesByPriority sorts decision indexes: close positions first, then open positions, finally hold/wait
+// This avoids position stacking overflow when changing positions while keeping mutations on the original decisions slice.
+func sortDecisionIndexesByPriority(decisions []kernel.Decision) []int {
 	if len(decisions) <= 1 {
-		return decisions
+		indexes := make([]int, len(decisions))
+		for i := range decisions {
+			indexes[i] = i
+		}
+		return indexes
 	}
 
 	// Define priority
@@ -693,20 +714,21 @@ func sortDecisionsByPriority(decisions []kernel.Decision) []kernel.Decision {
 		}
 	}
 
-	// Copy decision list
-	sorted := make([]kernel.Decision, len(decisions))
-	copy(sorted, decisions)
+	indexes := make([]int, len(decisions))
+	for i := range decisions {
+		indexes[i] = i
+	}
 
 	// Sort by priority
-	for i := 0; i < len(sorted)-1; i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if getActionPriority(sorted[i].Action) > getActionPriority(sorted[j].Action) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
+	for i := 0; i < len(indexes)-1; i++ {
+		for j := i + 1; j < len(indexes); j++ {
+			if getActionPriority(decisions[indexes[i]].Action) > getActionPriority(decisions[indexes[j]].Action) {
+				indexes[i], indexes[j] = indexes[j], indexes[i]
 			}
 		}
 	}
 
-	return sorted
+	return indexes
 }
 
 // checkClaw402Balance checks USDC balance and logs warnings if low

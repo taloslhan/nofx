@@ -2,6 +2,7 @@ package trader
 
 import (
 	"nofx/kernel"
+	"nofx/store"
 	"testing"
 )
 
@@ -60,5 +61,46 @@ func TestApplyReverseSLTPRecalculationNoopWithoutOriginals(t *testing.T) {
 	}
 	if decision.StopLoss != 120 || decision.TakeProfit != 80 {
 		t.Fatalf("expected decision to stay unchanged, got stop=%v take=%v", decision.StopLoss, decision.TakeProfit)
+	}
+}
+
+func TestSyncActionRecordRiskTargets(t *testing.T) {
+	actionRecord := &store.DecisionAction{
+		StopLoss:   95,
+		TakeProfit: 110,
+	}
+	decision := &kernel.Decision{
+		StopLoss:   105,
+		TakeProfit: 90,
+	}
+
+	syncActionRecordRiskTargets(actionRecord, decision)
+
+	if actionRecord.StopLoss != 105 {
+		t.Fatalf("expected synced stop loss 105, got %v", actionRecord.StopLoss)
+	}
+	if actionRecord.TakeProfit != 90 {
+		t.Fatalf("expected synced take profit 90, got %v", actionRecord.TakeProfit)
+	}
+}
+
+func TestSortDecisionIndexesByPriority(t *testing.T) {
+	decisions := []kernel.Decision{
+		{Action: "open_short", Symbol: "BTCUSDT"},
+		{Action: "wait", Symbol: "SOLUSDT"},
+		{Action: "close_long", Symbol: "ETHUSDT"},
+		{Action: "open_long", Symbol: "BNBUSDT"},
+	}
+
+	got := sortDecisionIndexesByPriority(decisions)
+	want := []int{2, 0, 3, 1}
+
+	if len(got) != len(want) {
+		t.Fatalf("expected %d indexes, got %d", len(want), len(got))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected order %v, got %v", want, got)
+		}
 	}
 }

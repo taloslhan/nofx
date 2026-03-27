@@ -152,8 +152,10 @@ type Decision struct {
 	Reasoning  string  `json:"reasoning"`
 
 	// Internal execution metadata (not persisted in AI JSON)
-	OriginalAction   string   `json:"-"`
-	TransformApplied []string `json:"-"`
+	OriginalAction     string   `json:"-"`
+	OriginalStopLoss   float64  `json:"-"`
+	OriginalTakeProfit float64  `json:"-"`
+	TransformApplied   []string `json:"-"`
 }
 
 // FullDecision AI's complete decision (including chain of thought)

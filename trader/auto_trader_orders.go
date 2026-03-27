@@ -173,6 +173,34 @@ func (at *AutoTrader) enforceMinHoldBeforeClose(symbol string, snapshot *closePo
 		symbol, int(holdDuration.Minutes()), minHoldMinutes, snapshot.currentPnLPct, emergencyLossPct)
 }
 
+func applyReverseSLTPRecalculation(decision *kernel.Decision, marketPrice float64) bool {
+	if decision == nil || marketPrice <= 0 {
+		return false
+	}
+	if decision.OriginalStopLoss == 0 && decision.OriginalTakeProfit == 0 {
+		return false
+	}
+
+	oldStopLoss := decision.StopLoss
+	oldTakeProfit := decision.TakeProfit
+
+	if decision.OriginalStopLoss > 0 {
+		decision.StopLoss = 2*marketPrice - decision.OriginalStopLoss
+	}
+	if decision.OriginalTakeProfit > 0 {
+		decision.TakeProfit = 2*marketPrice - decision.OriginalTakeProfit
+	}
+
+	logger.Infof("  🔄 [REVERSE] Recalculated SL/TP around market price %.4f (current stop: %.4f -> %.4f, current take: %.4f -> %.4f, original stop: %.4f, original take: %.4f)",
+		marketPrice,
+		oldStopLoss, decision.StopLoss,
+		oldTakeProfit, decision.TakeProfit,
+		decision.OriginalStopLoss, decision.OriginalTakeProfit,
+	)
+
+	return true
+}
+
 // executeOpenLongWithRecord executes open long position and records detailed information
 func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
 	logger.Infof("  📈 Open long: %s", decision.Symbol)
@@ -205,6 +233,8 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	if err != nil {
 		return err
 	}
+
+	applyReverseSLTPRecalculation(decision, marketData.CurrentPrice)
 
 	// Get balance (needed for multiple checks)
 	balance, err := at.trader.GetBalance()
@@ -350,6 +380,8 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	if err != nil {
 		return err
 	}
+
+	applyReverseSLTPRecalculation(decision, marketData.CurrentPrice)
 
 	// Get balance (needed for multiple checks)
 	balance, err := at.trader.GetBalance()

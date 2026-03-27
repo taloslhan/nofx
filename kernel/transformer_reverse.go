@@ -7,16 +7,34 @@ import (
 
 const defaultReverseMinRiskRewardRatio = 0.5
 
+const (
+	ReverseSLTPModeSwap        = "swap"
+	ReverseSLTPModeRecalculate = "recalculate"
+	ReverseSLTPModeNone        = "none"
+)
+
 // ReverseConfig controls reverse-strategy behavior for opening decisions.
 type ReverseConfig struct {
 	Enabled            bool
 	SwapSLTP           bool
+	SLTPMode           string
 	LeverageScale      float64
 	PositionScale      float64
 	MinRiskRewardRatio float64
 }
 
 func (c ReverseConfig) normalized() ReverseConfig {
+	switch c.SLTPMode {
+	case ReverseSLTPModeSwap, ReverseSLTPModeRecalculate, ReverseSLTPModeNone:
+	case "":
+		if c.SwapSLTP {
+			c.SLTPMode = ReverseSLTPModeSwap
+		} else {
+			c.SLTPMode = ReverseSLTPModeNone
+		}
+	default:
+		c.SLTPMode = ReverseSLTPModeRecalculate
+	}
 	if c.LeverageScale <= 0 {
 		c.LeverageScale = 1
 	}
@@ -71,9 +89,13 @@ func (t *ReverseTransformer) Transform(decision Decision) *Decision {
 	transformed.OriginalAction = decision.Action
 	transformed.TransformApplied = append(copyTransforms(decision.TransformApplied), t.Name())
 
-	if t.config.SwapSLTP {
+	switch t.config.SLTPMode {
+	case ReverseSLTPModeSwap:
 		transformed.StopLoss = decision.TakeProfit
 		transformed.TakeProfit = decision.StopLoss
+	case ReverseSLTPModeRecalculate:
+		transformed.OriginalStopLoss = decision.StopLoss
+		transformed.OriginalTakeProfit = decision.TakeProfit
 	}
 
 	if decision.Leverage > 0 {

@@ -28,7 +28,7 @@ func TestTransformerPipelineNoop(t *testing.T) {
 func TestTransformerReverseOpenLong(t *testing.T) {
 	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
 		Enabled:       true,
-		SwapSLTP:      true,
+		SLTPMode:      ReverseSLTPModeSwap,
 		LeverageScale: 1,
 		PositionScale: 1,
 	}))
@@ -68,7 +68,7 @@ func TestTransformerReverseOpenLong(t *testing.T) {
 func TestTransformerReverseOpenShort(t *testing.T) {
 	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
 		Enabled:       true,
-		SwapSLTP:      true,
+		SLTPMode:      ReverseSLTPModeSwap,
 		LeverageScale: 1,
 		PositionScale: 1,
 	}))
@@ -125,7 +125,7 @@ func TestTransformerReverseDisabled(t *testing.T) {
 func TestTransformerReverseScaling(t *testing.T) {
 	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
 		Enabled:            true,
-		SwapSLTP:           true,
+		SLTPMode:           ReverseSLTPModeSwap,
 		LeverageScale:      0.5,
 		PositionScale:      0.25,
 		MinRiskRewardRatio: 0.5,
@@ -151,7 +151,7 @@ func TestTransformerReverseScaling(t *testing.T) {
 
 func TestTransformerPipelineChaining(t *testing.T) {
 	pipeline := NewDecisionPipeline(
-		NewReverseTransformer(ReverseConfig{Enabled: true, SwapSLTP: true}),
+		NewReverseTransformer(ReverseConfig{Enabled: true, SLTPMode: ReverseSLTPModeSwap}),
 		appendReasoningTransformer{},
 	)
 
@@ -177,5 +177,74 @@ func TestTransformerPipelineChaining(t *testing.T) {
 	}
 	if got.TransformApplied[0] != "reverse" || got.TransformApplied[1] != "append_reasoning" {
 		t.Fatalf("unexpected transform chain: %#v", got.TransformApplied)
+	}
+}
+
+func TestTransformerReverseRecalculatePreservesOriginalSLTP(t *testing.T) {
+	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
+		Enabled:  true,
+		SLTPMode: ReverseSLTPModeRecalculate,
+	}))
+
+	results := pipeline.Apply([]Decision{{
+		Symbol:     "BTCUSDT",
+		Action:     "open_long",
+		StopLoss:   84000,
+		TakeProfit: 88000,
+	}})
+
+	got := results[0].Transformed
+	if got.Action != "open_short" {
+		t.Fatalf("expected open_short, got %s", got.Action)
+	}
+	if got.StopLoss != 84000 || got.TakeProfit != 88000 {
+		t.Fatalf("expected SL/TP unchanged before execution, got stop=%v take=%v", got.StopLoss, got.TakeProfit)
+	}
+	if got.OriginalStopLoss != 84000 || got.OriginalTakeProfit != 88000 {
+		t.Fatalf("expected original SL/TP to be preserved, got original stop=%v take=%v", got.OriginalStopLoss, got.OriginalTakeProfit)
+	}
+}
+
+func TestTransformerReverseNoneLeavesSLTPUntouched(t *testing.T) {
+	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
+		Enabled:  true,
+		SLTPMode: ReverseSLTPModeNone,
+	}))
+
+	results := pipeline.Apply([]Decision{{
+		Symbol:     "ETHUSDT",
+		Action:     "open_short",
+		StopLoss:   3100,
+		TakeProfit: 2800,
+	}})
+
+	got := results[0].Transformed
+	if got.Action != "open_long" {
+		t.Fatalf("expected open_long, got %s", got.Action)
+	}
+	if got.StopLoss != 3100 || got.TakeProfit != 2800 {
+		t.Fatalf("expected SL/TP unchanged, got stop=%v take=%v", got.StopLoss, got.TakeProfit)
+	}
+	if got.OriginalStopLoss != 0 || got.OriginalTakeProfit != 0 {
+		t.Fatalf("expected no preserved originals, got original stop=%v take=%v", got.OriginalStopLoss, got.OriginalTakeProfit)
+	}
+}
+
+func TestTransformerReverseLegacySwapCompat(t *testing.T) {
+	pipeline := NewDecisionPipeline(NewReverseTransformer(ReverseConfig{
+		Enabled:  true,
+		SwapSLTP: true,
+	}))
+
+	results := pipeline.Apply([]Decision{{
+		Symbol:     "SOLUSDT",
+		Action:     "open_long",
+		StopLoss:   100,
+		TakeProfit: 120,
+	}})
+
+	got := results[0].Transformed
+	if got.StopLoss != 120 || got.TakeProfit != 100 {
+		t.Fatalf("expected legacy swap compatibility, got stop=%v take=%v", got.StopLoss, got.TakeProfit)
 	}
 }

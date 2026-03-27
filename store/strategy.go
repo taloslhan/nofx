@@ -94,6 +94,7 @@ type GridStrategyConfig struct {
 type ReverseStrategyConfig struct {
 	Enabled            bool    `json:"enabled,omitempty"`
 	SwapSLTP           *bool   `json:"swap_sl_tp,omitempty"`
+	SLTPMode           string  `json:"sltp_mode,omitempty"`
 	LeverageScale      float64 `json:"leverage_scale,omitempty"`
 	PositionScale      float64 `json:"position_scale,omitempty"`
 	MinRiskRewardRatio float64 `json:"min_risk_reward_ratio,omitempty"`

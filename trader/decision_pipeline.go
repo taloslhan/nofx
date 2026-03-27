@@ -22,18 +22,28 @@ func toKernelReverseConfig(config *store.ReverseStrategyConfig) kernel.ReverseCo
 		return kernel.ReverseConfig{}
 	}
 
-	swapSLTP := true
-	if config.SwapSLTP != nil {
-		swapSLTP = *config.SwapSLTP
-	}
-
 	return kernel.ReverseConfig{
 		Enabled:            config.Enabled,
-		SwapSLTP:           swapSLTP,
+		SwapSLTP:           config.SwapSLTP != nil && *config.SwapSLTP,
+		SLTPMode:           resolveReverseSLTPMode(config.SLTPMode, config.SwapSLTP),
 		LeverageScale:      config.LeverageScale,
 		PositionScale:      config.PositionScale,
 		MinRiskRewardRatio: config.MinRiskRewardRatio,
 	}
+}
+
+func resolveReverseSLTPMode(mode string, swapSLTP *bool) string {
+	switch mode {
+	case kernel.ReverseSLTPModeSwap, kernel.ReverseSLTPModeRecalculate, kernel.ReverseSLTPModeNone:
+		return mode
+	}
+	if swapSLTP != nil {
+		if *swapSLTP {
+			return kernel.ReverseSLTPModeSwap
+		}
+		return kernel.ReverseSLTPModeNone
+	}
+	return kernel.ReverseSLTPModeRecalculate
 }
 
 func hasDecisionTransform(decision *kernel.Decision, name string) bool {

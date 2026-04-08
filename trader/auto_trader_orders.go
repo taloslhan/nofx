@@ -226,6 +226,11 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 		if pos["symbol"] == decision.Symbol && pos["side"] == "long" {
 			return fmt.Errorf("❌ %s already has long position, close it first", decision.Symbol)
 		}
+		// [GUARD] Block opening long if opposite-side (short) position exists for the same symbol
+		// This prevents dual positions when reverse shadow close is blocked by min hold time
+		if pos["symbol"] == decision.Symbol && pos["side"] == "short" && hasDecisionTransform(decision, "reverse") {
+			return fmt.Errorf("❌ [REVERSE GUARD] %s already has short position, cannot open long until short is closed", decision.Symbol)
+		}
 	}
 
 	// Get current price
@@ -372,6 +377,11 @@ func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, acti
 	for _, pos := range positions {
 		if pos["symbol"] == decision.Symbol && pos["side"] == "short" {
 			return fmt.Errorf("❌ %s already has short position, close it first", decision.Symbol)
+		}
+		// [GUARD] Block opening short if opposite-side (long) position exists for the same symbol
+		// This prevents dual positions when reverse shadow close is blocked by min hold time
+		if pos["symbol"] == decision.Symbol && pos["side"] == "long" && hasDecisionTransform(decision, "reverse") {
+			return fmt.Errorf("❌ [REVERSE GUARD] %s already has long position, cannot open short until long is closed", decision.Symbol)
 		}
 	}
 

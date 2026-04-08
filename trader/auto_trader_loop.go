@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"nofx/kernel"
 	"nofx/logger"
+	"nofx/market"
 	"nofx/store"
 	"nofx/wallet"
 	"sort"
@@ -322,6 +323,7 @@ func (at *AutoTrader) runCycle() error {
 	}
 
 	// Execute decisions and record results
+	failedCloseSymbols := make(map[string]bool) // Track symbols whose close decisions failed
 	for _, idx := range executionOrder {
 		d := &aiDecision.Decisions[idx]
 		// Check if trader is stopped before each decision (allow immediate stop during execution)
@@ -331,6 +333,14 @@ func (at *AutoTrader) runCycle() error {
 		if !running {
 			logger.Infof("⏹ Trader stopped during decision execution, aborting remaining decisions")
 			break
+		}
+
+		// Skip open decisions that depend on a prior close that failed
+		// This prevents dual positions when reverse shadow close is blocked by min hold time
+		if d.DependsOnSymbolClose != "" && failedCloseSymbols[d.DependsOnSymbolClose] {
+			logger.Infof("⏭️ [REVERSE] Skipping %s %s: dependent close for %s failed", d.Action, d.Symbol, d.DependsOnSymbolClose)
+			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("⏭️ %s %s skipped: dependent close failed", d.Symbol, d.Action))
+			continue
 		}
 
 		actionRecord := store.DecisionAction{
@@ -353,6 +363,11 @@ func (at *AutoTrader) runCycle() error {
 			logger.Infof("❌ Failed to execute decision (%s %s): %v", d.Symbol, d.Action, err)
 			actionRecord.Error = err.Error()
 			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("❌ %s %s failed: %v", d.Symbol, d.Action, err))
+
+			// Track failed close decisions so dependent opens can be skipped
+			if d.Action == "close_long" || d.Action == "close_short" {
+				failedCloseSymbols[market.Normalize(d.Symbol)] = true
+			}
 		} else {
 			actionRecord.Success = true
 			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("✓ %s %s succeeded", d.Symbol, d.Action))

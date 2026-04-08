@@ -155,7 +155,8 @@ type Decision struct {
 	OriginalAction     string   `json:"-"`
 	OriginalStopLoss   float64  `json:"-"`
 	OriginalTakeProfit float64  `json:"-"`
-	TransformApplied   []string `json:"-"`
+	TransformApplied       []string `json:"-"`
+	DependsOnSymbolClose   string   `json:"-"` // If set, this open decision depends on a prior close for the same symbol succeeding
 }
 
 // FullDecision AI's complete decision (including chain of thought)

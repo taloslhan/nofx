@@ -157,6 +157,7 @@ func (at *AutoTrader) planReverseShadowDecisions(decisions []kernel.Decision) []
 			Action:    "close_" + existingSide,
 			Reasoning: fmt.Sprintf("[REVERSE] Close shadow %s before switching to %s", existingSide, targetSide),
 		})
+		decision.DependsOnSymbolClose = normalizedSymbol
 		planned = append(planned, decision)
 		reverseStates[normalizedSymbol] = targetSide
 	}
